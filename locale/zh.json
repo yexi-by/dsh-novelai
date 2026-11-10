@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "NovelAI 生图",
+    "description": "通过 NovelAI API 生成与编辑图片，支持参考图、Director Tools、放大和随附提示词 Skill。"
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "name": "dsh-novelai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NovelAI 图像生成、编辑、参考图与提示词 Skill 的 DSH 插件",
+  "type": "module",
+  "main": "lib/node.js",
+  "exports": {
+    ".": "./lib/node.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": ["lib", "assets", "locale", "cordis.patch.yml", "README.md"],
+  "dsh": {
+    "bundle": {"patch": "./cordis.patch.yml"},
+    "client": {
+      "platform": "web",
+      "inject": ["@deepseek-ai/dsh-client-connection", "@deepseek-ai/dsh-client-locale", "@deepseek-ai/dsh-api-remotes", "@deepseek-ai/dsh-client-ui-settings", "@deepseek-ai/dsh-client-ui-plugin-manager"]
+    }
+  },
+  "scripts": {
+    "sync-api": "node scripts/sync-api.mjs",
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.spec.mjs",
+    "test:live": "node scripts/live-test.mjs",
+    "check": "pnpm typecheck && pnpm build && pnpm test"
+  },
+  "dependencies": {"fflate": "^0.8.3", "sharp": "0.35.5"},
+  "devDependencies": {"@types/node": "^24.0.0", "@types/react": "~18.3.1", "react": "^18.3.1", "tsdown": "^0.22.2", "typescript": "^7.0.0"},
+  "engines": {"node": ">=24.9.0", "dsh": ">=0.2.2-rc.1 <0.2.3-0"},
+  "packageManager": "pnpm@12.14.0"
+}

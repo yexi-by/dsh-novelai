@@ -1,0 +1,387 @@
+{
+  "source": "https://image.novelai.net/docs/doc.json",
+  "definitions": {
+    "image.RequestParameters": {
+      "type": "object",
+      "properties": {
+        "add_original_image": {
+          "type": "boolean"
+        },
+        "cfg_rescale": {
+          "type": "number"
+        },
+        "color_correct": {
+          "type": "boolean"
+        },
+        "controlnet_condition": {
+          "description": "used by ControlNet",
+          "type": "string"
+        },
+        "controlnet_model": {
+          "type": "string"
+        },
+        "controlnet_strength": {
+          "type": "number"
+        },
+        "deliberate_euler_ancestral_bug": {
+          "description": "(Summer Sampler update) add ancestral noise even on the final step of sampling, despite the fact we're not going to run the denoiser again, default true (maintaining bug-for-bug compatibility)",
+          "type": "boolean"
+        },
+        "director_reference_descriptions": {
+          "description": "For CR: set `caption` with a `base_caption` of `\"character\"` or `\"character&style\"`",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/image.V4ConditionInput"
+          }
+        },
+        "director_reference_images": {
+          "description": "For CR: 1024x1536 or 1536x1024 or 1472x1472 with black padding to fit",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "director_reference_information_extracted": {
+          "description": "For CR: 0-1",
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "director_reference_secondary_strength_values": {
+          "description": "For CR: Maps to Fidelity slider (0-1)",
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "director_reference_strength_values": {
+          "description": "API external name. 0-1",
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "dynamic_thresholding": {
+          "type": "boolean"
+        },
+        "extra_noise_seed": {
+          "type": "integer"
+        },
+        "height": {
+          "type": "integer"
+        },
+        "image": {
+          "type": "string"
+        },
+        "image_format": {
+          "$ref": "#/definitions/image.ImageFormat"
+        },
+        "img2img": {
+          "description": "used by inpaint",
+          "allOf": [
+            {
+              "$ref": "#/definitions/image.Img2ImgParams"
+            }
+          ]
+        },
+        "legacy": {
+          "type": "boolean"
+        },
+        "legacy_v3_extend": {
+          "type": "boolean"
+        },
+        "mask": {
+          "type": "string"
+        },
+        "n_samples": {
+          "type": "integer"
+        },
+        "negative_prompt": {
+          "type": "string"
+        },
+        "noise": {
+          "type": "number"
+        },
+        "noise_schedule": {
+          "type": "string"
+        },
+        "params_version": {
+          "type": "integer"
+        },
+        "prefer_brownian": {
+          "type": "boolean"
+        },
+        "prompt": {
+          "type": "string"
+        },
+        "qualityToggle": {
+          "type": "boolean"
+        },
+        "reference_image": {
+          "type": "string"
+        },
+        "reference_image_multiple": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reference_information_extracted": {
+          "type": "number"
+        },
+        "reference_information_extracted_multiple": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "reference_strength": {
+          "type": "number"
+        },
+        "reference_strength_multiple": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "sampler": {
+          "type": "string"
+        },
+        "scale": {
+          "type": "number"
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "skip_cfg_above_sigma": {
+          "description": "(Summer Sampler update) triggers Variety Boost",
+          "type": "number"
+        },
+        "sm": {
+          "type": "boolean"
+        },
+        "sm_dyn": {
+          "type": "boolean"
+        },
+        "steps": {
+          "type": "number"
+        },
+        "straight_alpha": {
+          "type": "boolean"
+        },
+        "stream": {
+          "$ref": "#/definitions/image.StreamingType"
+        },
+        "strength": {
+          "type": "number"
+        },
+        "tag_hint_qt": {
+          "type": "integer"
+        },
+        "tag_hint_transparent_background": {
+          "description": "Pure pass-through hint for the model: the prompt is asking for a transparent\nbackground. Omegalaser does not interpret it.",
+          "type": "boolean"
+        },
+        "tag_hint_uc_preset": {
+          "type": "integer"
+        },
+        "ucPreset": {
+          "type": "integer"
+        },
+        "upscale": {
+          "$ref": "#/definitions/image.UpscaleParams"
+        },
+        "upscaled_enhance": {
+          "type": "boolean"
+        },
+        "v4_negative_prompt": {
+          "$ref": "#/definitions/image.V4ConditionInput"
+        },
+        "v4_prompt": {
+          "$ref": "#/definitions/image.V4ConditionInput"
+        },
+        "width": {
+          "type": "integer"
+        }
+      }
+    },
+    "image.V4ConditionInput": {
+      "type": "object",
+      "properties": {
+        "caption": {
+          "$ref": "#/definitions/image.V4ExternalCaption"
+        },
+        "legacy_uc": {
+          "type": "boolean"
+        },
+        "use_coords": {
+          "type": "boolean"
+        },
+        "use_order": {
+          "type": "boolean"
+        }
+      }
+    },
+    "image.V4ExternalCaption": {
+      "type": "object",
+      "properties": {
+        "base_caption": {
+          "type": "string"
+        },
+        "char_captions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/image.V4ExternalCharacterCaption"
+          }
+        }
+      }
+    },
+    "image.V4ExternalCharacterCaption": {
+      "type": "object",
+      "properties": {
+        "centers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/image.Coordinates"
+          }
+        },
+        "char_caption": {
+          "type": "string"
+        }
+      }
+    },
+    "image.Coordinates": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      }
+    },
+    "image.ImageFormat": {
+      "type": "string",
+      "enum": [
+        "png",
+        "webp"
+      ],
+      "x-enum-varnames": [
+        "ImageFormatPNG",
+        "ImageFormatWEBP"
+      ]
+    },
+    "image.Img2ImgParams": {
+      "type": "object",
+      "properties": {
+        "color_correct": {
+          "type": "boolean"
+        },
+        "extra_noise_seed": {
+          "type": "integer"
+        },
+        "noise": {
+          "type": "number"
+        },
+        "strength": {
+          "type": "number"
+        }
+      }
+    },
+    "image.StreamingType": {
+      "type": "string",
+      "enum": [
+        "msgpack",
+        "sse"
+      ],
+      "x-enum-varnames": [
+        "StreamingTypeMsgpack",
+        "StreamingTypeSSE"
+      ]
+    },
+    "image.UpscaleParams": {
+      "type": "object",
+      "properties": {
+        "declared_blur_sigma": {
+          "description": "round it to one of these values: [0.0, 0.30, 0.35, 0.40, 0.45, 0.50]",
+          "type": "number"
+        }
+      }
+    },
+    "image.AugmentImageRequest": {
+      "type": "object",
+      "properties": {
+        "defry": {
+          "type": "integer"
+        },
+        "height": {
+          "type": "integer"
+        },
+        "image": {
+          "type": "string"
+        },
+        "prompt": {
+          "type": "string"
+        },
+        "req_type": {
+          "type": "string"
+        },
+        "width": {
+          "type": "integer"
+        }
+      }
+    },
+    "image.UpscaleRequest": {
+      "type": "object",
+      "properties": {
+        "declared_blur_sigma": {
+          "description": "same param as generation param",
+          "type": "number"
+        },
+        "image": {
+          "description": "can be given as base64 or as multipart pointer",
+          "type": "string"
+        },
+        "model": {
+          "description": "must be an existing image model API name",
+          "type": "string"
+        }
+      }
+    },
+    "image.EncodeVibeRequest": {
+      "type": "object",
+      "properties": {
+        "crop_to_mask": {
+          "description": "Whether to crop the image to the bounding box of the mask's visible area (if a mask is provided)",
+          "type": "boolean"
+        },
+        "focus_seed": {
+          "description": "seed used for random choice of which areas of the image to give a closer look to. leave unspecified to use a deterministic seed chosen based on the image content (recommended).",
+          "type": "integer"
+        },
+        "image": {
+          "description": "base64 encoded image",
+          "type": "string"
+        },
+        "info_extract_seed": {
+          "description": "seed used for random noising out of the image's information (to extent specified by information_extracted). leave unspecified to use a deterministic seed chosen based on the image content (recommended)",
+          "type": "integer"
+        },
+        "information_extracted": {
+          "type": "number",
+          "maximum": 1,
+          "minimum": 0
+        },
+        "mask": {
+          "description": "Base64 encoded mask to be applied to the image",
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

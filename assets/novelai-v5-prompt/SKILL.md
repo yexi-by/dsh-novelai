@@ -7,13 +7,7 @@ description: 使用 NovelAI 生成或编辑图片，编写 V5 标签与自然语
 
 将用户的视觉需求转为 NovelAI 提示词，通过已安装的 `novelai_*` 工具生成或编辑真实图片，再把返回的图片插入回复正文。提示词写作参考 cheng1559/novelai-agent 的 novelai-v5-prompt；这里的执行流程适配 DSH。
 
-## 默认使用工具配置
-
-普通文生图使用插件默认配置，优先只传 `prompt`，按画面内容需要补充 `negative_prompt` 或 `characters`。省略 `model`、`action` 和 `parameters`，让工具填入默认值，无需把默认参数手写一遍。
-
-只有用户提出特殊要求时才覆盖相关字段，例如横竖画幅、指定尺寸、多张图片、固定 seed、指定模型、参考图或编辑任务。其余参数继续省略。专注调整提示词，不因节省额度或自行追求画质而主动改变尺寸、步数、CFG、采样器、模型或开启放大。
-
-默认配置为 V5 Full、1024×1024、28 steps、scale 6、单张、随机 seed，采样器为 k_euler_ancestral、噪声调度为 Karras；用户在插件设置中选择的模型优先。不为普通生图预查 Opus 使用条、等待其恢复或自动切换模型；用户要求查询账户时再使用 `novelai_account`。
+无特殊要求，尽量保证默认参数即可。
 
 ## 选择工具与模型
 
@@ -47,12 +41,10 @@ Vibe Transfer 与 Precise Reference 当前不能同时使用。V5 Curated 的局
 
 常用参数放在 `parameters`，如 `width`、`height`、`steps`、`scale`、`sampler`、`seed`、`n_samples`、`strength`、`noise`、`cfg_rescale`、`straight_alpha`、`upscale`。完整字段由官方 schema 提供，见 `novelai_capabilities`。这些是图像扩散参数，与聊天模型的生成参数无关。
 
-普通文生图省略 `parameters`，使用上述默认配置。带源图的编辑任务默认沿用源图尺寸并对齐 64。只有用户要求特定画幅或尺寸时才填写 width/height；尺寸为 64 的倍数，常用竖图为 832×1216，横图为 1216×832。只有用户要求多图、固定 seed 或调整生成设置时才填写对应参数。
-
-- 图生图和 Enhance：指定 `image_path`，默认 strength/noise 由工具提供；用户要求特定改动程度时再覆盖。Enhance 默认 strength 为 0.2，noise 为 0。
+- 图生图和 Enhance：指定 `image_path`，通过 strength/noise 控制改动。
 - 局部重绘：指定 `image_path` 和 `mask_path`；白色区域重绘、黑色保留，蒙版与源图对应。扩图可先准备扩展画布和蒙版，再使用同一 infill 流程。
-- Vibe：在 `vibes` 中提供 `image_path` 或既有 `encoding_path`，strength/information_extracted 默认省略，用户有对应要求时再设置。V4+ 首次编码需要付费，插件按内容与设置缓存；更改提取参数会形成新编码。
-- Precise Reference：在 `references` 中提供图像路径和需要的 `type`（character/style/character&style），fidelity/strength 默认省略。插件负责适配官方参考画布。只用于支持的 V4.5 模型。
+- Vibe：在 `vibes` 中提供 `image_path` 或既有 `encoding_path`，可选 strength/information_extracted。V4+ 首次编码需要付费，插件按内容与设置缓存；更改提取参数会形成新编码。
+- Precise Reference：在 `references` 中提供图像路径，可选 `type`（character/style/character&style）、fidelity/strength。插件负责适配官方参考画布。只用于支持的 V4.5 模型。
 - 控制图、旧模型专用参数及精确 API caption 可通过完整 `parameters` 对象使用；二进制字段需提供 Base64，普通图片输入优先使用路径字段。
 
 具体调用示例与模型限制见 [references/tools.md](references/tools.md)。

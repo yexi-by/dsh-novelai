@@ -1,14 +1,12 @@
 # 工具调用示例
 
-## 普通文生图：使用默认配置
-
-未提出特殊参数要求时，只传提示词，按画面内容需要补充负向提示词。不要主动填写 `model` 或 `parameters`。
+## 普通文生图
 
 ```json
 {"prompt":"landscape, lakeside cabin, pine forest, sunrise, watercolor illustration, high complexity"}
 ```
 
-## 多角色：保留生成参数默认值
+## 多角色
 
 ```json
 {
@@ -21,7 +19,7 @@
 }
 ```
 
-用户明确要求横图和固定 seed 时，只覆盖这些字段，步数等继续使用默认值：
+横图和固定 seed 示例：
 
 ```json
 {"prompt":"landscape, lakeside cabin, watercolor","parameters":{"width":1216,"height":832,"seed":123456}}

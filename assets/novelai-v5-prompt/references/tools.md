@@ -1,48 +1,60 @@
 # 工具调用示例
 
-## 文生图与多角色
+## 普通文生图：使用默认配置
+
+未提出特殊参数要求时，只传提示词，按画面内容需要补充负向提示词。不要主动填写 `model` 或 `parameters`。
+
+```json
+{"prompt":"landscape, lakeside cabin, pine forest, sunrise, watercolor illustration, high complexity"}
+```
+
+## 多角色：保留生成参数默认值
 
 ```json
 {
   "prompt": "2girls, coffee shop, window seat, warm afternoon light, high complexity, very aesthetic",
   "negative_prompt": "lowres, artistic error, jpeg artifacts",
   "characters": [
-    {"prompt": "girl, black hair, blue eyes, white shirt", "positions": [{"x": 0.3, "y": 0.5}]},
-    {"prompt": "girl, silver hair, green eyes, blue jacket", "positions": [{"x": 0.7, "y": 0.5}]}
-  ],
-  "use_coords": true,
-  "parameters": {"width": 1216, "height": 832, "seed": 123456, "steps": 28}
+    {"prompt": "girl, black hair, blue eyes, white shirt"},
+    {"prompt": "girl, silver hair, green eyes, blue jacket"}
+  ]
 }
+```
+
+用户明确要求横图和固定 seed 时，只覆盖这些字段，步数等继续使用默认值：
+
+```json
+{"prompt":"landscape, lakeside cabin, watercolor","parameters":{"width":1216,"height":832,"seed":123456}}
 ```
 
 ## 图生图、局部重绘、增强
 
 ```json
-{"action":"img2img","image_path":"input.png","prompt":"city street in watercolor, rain, soft lighting","parameters":{"strength":0.6,"noise":0.1,"width":1024,"height":1024}}
+{"action":"img2img","image_path":"input.png","prompt":"city street in watercolor, rain, soft lighting"}
 ```
 
 ```json
-{"action":"infill","image_path":"input.png","mask_path":"mask.png","prompt":"red umbrella, detailed fabric","parameters":{"width":1024,"height":1024}}
+{"action":"infill","image_path":"input.png","mask_path":"mask.png","prompt":"red umbrella, detailed fabric"}
 ```
 
 ```json
-{"action":"enhance","image_path":"input.png","prompt":"detailed landscape, crisp mountains, sunset","parameters":{"strength":0.2,"noise":0,"width":1536,"height":1024}}
+{"action":"enhance","image_path":"input.png","prompt":"detailed landscape, crisp mountains, sunset"}
 ```
 
 ## Vibe Transfer 与 Precise Reference
 
 ```json
-{"model":"nai-diffusion-4-5-full","prompt":"landscape, lakeside cabin, watercolor","vibes":[{"image_path":"style.png","information_extracted":0.7,"strength":0.6}]}
+{"model":"nai-diffusion-4-5-full","prompt":"landscape, lakeside cabin, watercolor","vibes":[{"image_path":"style.png"}]}
 ```
 
 再次生成时用 `novelai_encode_vibe` 返回的缓存路径：
 
 ```json
-{"model":"nai-diffusion-4-5-full","prompt":"landscape, forest, dawn","vibes":[{"encoding_path":"novelai-output/.vibe-cache/<hash>.nai-vibe.json","information_extracted":0.7,"strength":0.6}]}
+{"model":"nai-diffusion-4-5-full","prompt":"landscape, forest, dawn","vibes":[{"encoding_path":"novelai-output/.vibe-cache/<hash>.nai-vibe.json"}]}
 ```
 
 ```json
-{"model":"nai-diffusion-4-5-full","prompt":"1girl, standing, city street","references":[{"image_path":"character.png","type":"character","fidelity":0.9}]}
+{"model":"nai-diffusion-4-5-full","prompt":"1girl, standing, city street","references":[{"image_path":"character.png"}]}
 ```
 
 ## Director Tools

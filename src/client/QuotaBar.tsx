@@ -388,7 +388,7 @@ export function AccountQuotaPanel({
         </button>
       </div>
 
-      {opus ? (
+      {opus && (
         <div className="nai-quota-hp-box">
           <div className="nai-quota-hp-top">
             <span className="nai-cluster">
@@ -420,14 +420,7 @@ export function AccountQuotaPanel({
               style={{ width: `${Math.max(0, Math.min(100, data.usage.percent))}%` }}
             />
           </div>
-          <p style={{ margin: 0, fontSize: 12, color: 'var(--dsw-alias-label-tertiary)', lineHeight: 1.5 }}>
-            {t('hpExplainOpus')}
-          </p>
         </div>
-      ) : (
-        <p style={{ margin: 0, fontSize: 12, color: 'var(--dsw-alias-label-tertiary)', lineHeight: 1.5 }}>
-          {t('hpExplainNonOpus')}
-        </p>
       )}
 
       <dl className="nai-quota-grid">

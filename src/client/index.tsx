@@ -144,8 +144,6 @@ function NovelAICard({
   return (
     <section style={{ display: 'grid', gap: 16, maxWidth: 720, color: 'var(--dsw-alias-label-primary)' }}>
       <h3 style={{ margin: 0 }}>{t('title')}</h3>
-      <p style={{ margin: 0, lineHeight: 1.6 }}>{t('intro')}</p>
-
       <AccountQuotaPanel
         view={accountView}
         onRefresh={() => { void run(async () => { await refreshAccount() }, t('connected')) }}

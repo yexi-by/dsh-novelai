@@ -2,7 +2,16 @@ import { isBuiltin } from 'node:module'
 import { isAbsolute } from 'node:path'
 import { defineConfig } from 'tsdown'
 
-const shared = ['react', 'react/jsx-runtime', '@deepseek-ai/cordis', '@deepseek-ai/dsh-client-ui-slots', '@deepseek-ai/dsh-client-ui-primitives']
+const shared = [
+  'react',
+  'react/jsx-runtime',
+  'react-dom',
+  'react-dom/client',
+  '@deepseek-ai/cordis',
+  '@deepseek-ai/dsh-client-store',
+  '@deepseek-ai/dsh-client-ui-slots',
+  '@deepseek-ai/dsh-client-ui-primitives',
+]
 const bare = (id: string): boolean => !id.startsWith('.') && !isAbsolute(id) && !isBuiltin(id)
 
 export default defineConfig([
@@ -14,7 +23,7 @@ export default defineConfig([
   },
   {
     entry: { client: 'src/client/index.tsx' }, outDir: 'lib', format: 'cjs', platform: 'browser',
-    inputOptions: { tsconfig: false }, dts: false, sourcemap: true, clean: false,
+    target: 'es2022', inputOptions: { tsconfig: false }, dts: false, sourcemap: true, clean: false,
     deps: { neverBundle: id => shared.includes(id), alwaysBundle: id => !shared.includes(id) },
     define: { 'process.env.NODE_ENV': '"production"' },
     outputOptions: {

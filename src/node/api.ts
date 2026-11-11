@@ -6,6 +6,9 @@ export interface GeneratedImage { data: Buffer; seed?: number }
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json }
 export type ApiPayload = Record<string, Json>
 
+const IMAGE_ACCEPT = 'application/json, application/zip, image/png, image/webp, */*;q=0.8'
+const BINARY_ACCEPT = 'application/octet-stream, application/json;q=0.9, */*;q=0.8'
+
 export class NovelAIClient {
   private readonly token: () => Promise<string>
   private readonly timeoutSeconds: () => number
@@ -16,11 +19,16 @@ export class NovelAIClient {
     origin = API_ORIGIN,
   ) { this.token = token; this.timeoutSeconds = timeoutSeconds; this.origin = origin }
 
-  async request(path: string, payload: ApiPayload | undefined, signal: AbortSignal): Promise<Response> {
+  async request(path: string, payload: ApiPayload | undefined, signal: AbortSignal, accept = 'application/json'): Promise<Response> {
     const token = await this.token()
     const response = await fetch(new URL(path, this.origin), {
       method: payload === undefined ? 'GET' : 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Accept: 'application/json', 'User-Agent': 'dsh-novelai/0.1.0' },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(payload === undefined ? {} : { 'Content-Type': 'application/json' }),
+        Accept: accept,
+        'User-Agent': 'dsh-novelai/0.1.0',
+      },
       ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
       signal: AbortSignal.any([signal, AbortSignal.timeout(this.timeoutSeconds() * 1000)]),
       redirect: 'error',
@@ -33,17 +41,23 @@ export class NovelAIClient {
   }
 
   async json(path: string, payload: ApiPayload | undefined, signal: AbortSignal): Promise<Json> {
-    return await (await this.request(path, payload, signal)).json() as Json
+    return await (await this.request(path, payload, signal, 'application/json')).json() as Json
+  }
+
+  async binary(path: string, payload: ApiPayload, signal: AbortSignal): Promise<Buffer> {
+    const response = await this.request(path, payload, signal, BINARY_ACCEPT)
+    return Buffer.from(await response.arrayBuffer())
   }
 
   async images(path: string, payload: ApiPayload, signal: AbortSignal): Promise<GeneratedImage[]> {
-    const response = await this.request(path, payload, signal)
+    const response = await this.request(path, payload, signal, IMAGE_ACCEPT)
     const bytes = Buffer.from(await response.arrayBuffer())
     return decodeImages(bytes, response.headers.get('content-type') ?? '')
   }
 }
 
 export async function decodeImages(bytes: Buffer, contentType: string): Promise<GeneratedImage[]> {
+  if (!bytes.length) throw new Error('NovelAI 返回了空图片结果')
   let images: GeneratedImage[]
   if (contentType.includes('json') || bytes[0] === 123) {
     const result: unknown = JSON.parse(bytes.toString('utf8'))

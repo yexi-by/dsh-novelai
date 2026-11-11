@@ -102,6 +102,12 @@
       ],
       "@deepseek-ai/dsh-skill": [
         "../../deepseek-harness/packages/skill/skill/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-sandbox": [
+        "../../deepseek-harness/packages/sandbox/sandbox/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-sandbox-policy": [
+        "../../deepseek-harness/packages/sandbox/sandbox-policy/lib/types/index.d.ts"
       ]
     },
     "resolveJsonModule": true

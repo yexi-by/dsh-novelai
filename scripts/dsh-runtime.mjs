@@ -27,7 +27,7 @@ export async function credentialToken() {
   } finally { await fiber.dispose() }
 }
 
-export async function toolRig(client, cwd, directory = 'novelai-output') {
+export async function toolRig(client, cwd, directory = 'novelai-output', options = {}) {
   const { Context } = await import('@deepseek-ai/cordis')
   const { default: LocalFs } = await import(new URL('packages/fs/fs-local/lib/index.js', harness))
   const { registerTools } = await import('../src/node/tools.ts')
@@ -35,15 +35,28 @@ export async function toolRig(client, cwd, directory = 'novelai-output') {
   const fiber = ctx.plugin(LocalFs, {})
   await fiber
   const definitions = new Map()
-  registerTools({ tools: { register(definition) { definitions.set(definition.name, definition) } },
-    fs: ctx.fs, workingDirectory: { ensure: async () => cwd } }, client,
-  () => ({ model: 'nai-diffusion-5-full', outputDirectory: directory, timeoutSeconds: 300 }))
+  const state = {
+    model: options.model ?? 'nai-diffusion-5-full',
+    outputDirectory: directory,
+    timeoutSeconds: 300,
+    policy: options.policy,
+  }
+  const sandboxService = {
+    resolve: () => state.policy,
+  }
+  registerTools({
+    tools: { register(definition) { definitions.set(definition.name, definition) } },
+    fs: ctx.fs,
+    workingDirectory: { ensure: async () => cwd },
+    get(key) { return key === 'sandboxPolicy' && state.policy ? sandboxService : undefined },
+  }, client, () => ({ model: state.model, outputDirectory: state.outputDirectory, timeoutSeconds: state.timeoutSeconds }))
   return {
     definitions,
+    state,
     async call(name, args = {}, signal = new AbortController().signal) {
       const definition = definitions.get(name)
       if (!definition) throw new Error(`Unknown test tool ${name}`)
-      return definition.execute(args, { agent: {}, signal, callId: 'test', rootCallId: 'test', name, arguments: args, deferContext() {} })
+      return definition.execute(args, { agent: { session: { id: 'test-session', header: { cwd } } }, signal, callId: 'test', rootCallId: 'test', name, arguments: args, deferContext() {}, concludeTurn() {} })
     },
     dispose: () => fiber.dispose(),
   }

@@ -66,7 +66,7 @@ try {
     const base = await run('v5-generate', 'novelai_generate', {
       prompt: '1girl, solo, adult woman, blue eyes, short silver hair, plain white sweater, winter park, snowing, soft morning light, upper body, anime illustration, high complexity, very aesthetic, best quality',
       negative_prompt: 'lowres, artistic error, scan artifacts, worst quality, jpeg artifacts, very displeasing, scarf, red',
-      parameters: { width: 832, height: 1216, seed: 3981726, steps: 24 },
+      parameters: { width: 832, height: 1216, seed: 3981726 },
     }, res => {
       assert.equal(res.images[0].width, 832)
       assert.equal(res.images[0].height, 1216)
@@ -80,13 +80,13 @@ try {
       await run('img2img', 'novelai_generate', {
         action: 'img2img', image_path: source,
         prompt: '1girl, solo, adult woman, short silver hair, navy blue coat, winter park, night, glowing streetlights, anime illustration, high complexity, very aesthetic',
-        parameters: { width: 832, height: 1216, steps: 20, strength: 0.55, noise: 0.1, seed: 3981726 },
+        parameters: { width: 832, height: 1216, strength: 0.55, noise: 0.1, seed: 3981726 },
       })
 
       await run('enhance', 'novelai_generate', {
         action: 'enhance', image_path: source,
         prompt: '1girl, solo, adult woman, short silver hair, plain white sweater, winter park, intricate eyelashes, crisp lighting, anime illustration, high complexity, very aesthetic, best quality',
-        parameters: { width: 832, height: 1216, steps: 20, seed: 3981726 },
+        parameters: { width: 832, height: 1216, seed: 3981726 },
       })
 
       // 构造带透明通道的 RGBA 蒙版：透明区域 (255,255,255,0) 应保留，胸口白色方块 (256×256) 重绘红围巾/大红蝴蝶结
@@ -108,7 +108,7 @@ try {
       await run('infill-v5-full', 'novelai_generate', {
         action: 'infill', image_path: source, mask_path: mask,
         prompt: '1girl, bright crimson red knitted scarf, big red ribbon bow on chest, vivid red fabric, winter park, anime illustration, high complexity, very aesthetic',
-        parameters: { width: 832, height: 1216, steps: 24, seed: 3981727 },
+        parameters: { width: 832, height: 1216, seed: 3981727 },
       }, async res => {
         assert.equal(res.model, 'nai-diffusion-5-full-inpainting')
         const insideDelta = await pixelRegionDelta(source, res.images[0].path, maskBox)
@@ -122,7 +122,7 @@ try {
         model: 'nai-diffusion-5-curated',
         action: 'infill', image_path: source, mask_path: mask,
         prompt: '1girl, bright emerald green ribbon bow on chest, winter park, anime illustration, very aesthetic',
-        parameters: { width: 832, height: 1216, steps: 20, seed: 3981728 },
+        parameters: { width: 832, height: 1216, seed: 3981728 },
       }, async res => {
         assert.equal(res.model, 'nai-diffusion-4-5-curated-inpainting')
         const insideDelta = await pixelRegionDelta(source, res.images[0].path, maskBox)
@@ -143,7 +143,7 @@ try {
       await run('v5-text-comic', 'novelai_generate', {
         prompt: '1girl, solo, adult woman, barista apron, smiling, holding coffee mug, speech bubble, text, english text, cozy cafe, high complexity, very aesthetic, best quality\nThe barista holds a warm mug and greets the viewer with a speech bubble.\nText: Good morning!',
         negative_prompt: 'lowres, artistic error, scan artifacts, worst quality, jpeg artifacts',
-        parameters: { width: 832, height: 1216, steps: 24, seed: 20261111, tag_hint_qt: 0 },
+        parameters: { width: 832, height: 1216, seed: 20261111, tag_hint_qt: 0 },
       })
 
       for (const operation of ['lineart', 'sketch', 'colorize', 'emotion', 'declutter', 'bg-removal']) {
@@ -162,7 +162,7 @@ try {
           { prompt: 'girl, brown hair, blue coat, blushing, target#holding hands', positions: [{ x: 0.7, y: 0.55 }] },
         ],
         use_coords: true,
-        parameters: { width: 1216, height: 832, steps: 20, seed: 1024 },
+        parameters: { width: 1216, height: 832, seed: 1024 },
       })
 
       const vibe = await run('encode-vibe', 'novelai_encode_vibe', { image_path: source, model: 'nai-diffusion-4-5-full', information_extracted: 0.7 })
@@ -176,7 +176,7 @@ try {
             model: 'nai-diffusion-4-5-full',
             prompt: '1girl, adult woman, silver hair, snowy town street, lantern light, anime illustration, very aesthetic',
             vibes: [{ encoding_path: vibe.encoding_path, information_extracted: 0.7, strength: 0.6 }],
-            parameters: { width: 832, height: 1216, steps: 20, seed: 1024 },
+            parameters: { width: 832, height: 1216, seed: 1024 },
           })
         }
       }
@@ -185,7 +185,7 @@ try {
         model: 'nai-diffusion-4-5-full',
         prompt: '1girl, adult woman, standing in sunny autumn park, anime illustration, very aesthetic, best quality',
         references: [{ image_path: source, type: 'character', fidelity: 0.8 }],
-        parameters: { width: 832, height: 1216, steps: 20, seed: 1024 },
+        parameters: { width: 832, height: 1216, seed: 1024 },
       })
     }
 

@@ -11,7 +11,8 @@ interface ApiSchema {
   allOf?: ApiSchema[]
 }
 
-const definitions: Record<string, ApiSchema> = api.definitions
+const definitions: Record<string, ApiSchema> = structuredClone(api.definitions)
+delete definitions['image.RequestParameters'].properties!.steps
 
 export function apiSchema(name: string): ValueSchemaSpec {
   return convert(definitions[name])
@@ -35,7 +36,7 @@ function convert(schema: ApiSchema): ValueSchemaSpec {
 export const generationParameters = apiSchema('image.RequestParameters') as ValueSchemaSpec & { properties: ParameterSchemaSpec }
 // 传输由插件处理；模型只传图片路径，实际图片字节不会进入工具参数或会话历史。
 delete generationParameters.properties.stream
-export const API_DEFINITIONS = api.definitions
+export const API_DEFINITIONS = definitions
 
 export const text = (description: string) => ({ type: 'string' as const, description })
 export const number = (description: string) => ({ type: 'number' as const, description })

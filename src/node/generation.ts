@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import type { SandboxExecutionPolicy } from '@deepseek-ai/dsh-sandbox'
 import sharp from 'sharp'
 import { BLUR_SIGMA_VALUES } from '../shared.ts'
+import type { Settings } from '../shared.ts'
 import type { ApiPayload, Json, NovelAIClient } from './api.ts'
 import { modelInfo, resolveGenerationModel } from './models.ts'
 import { assertWritablePaths } from './storage.ts'
@@ -29,7 +30,6 @@ export type ReadImage = (path: string) => Promise<Buffer>
 
 const MAX_DIMENSION = 2048
 const MAX_AUTO_AREA = 2048 * 1536
-const MAX_STEPS = 50
 const MAX_SAMPLES = 8
 
 export async function normalizeImage(bytes: Buffer): Promise<{ data: Buffer; width: number; height: number }> {
@@ -59,23 +59,24 @@ export function validateBlurSigma(value: unknown): number {
 
 export async function generationPayload(
   args: GenerateArgs,
-  defaultModel: string,
+  settings: Pick<Settings, 'model' | 'steps'>,
   read: ReadImage,
   encode: (vibe: Vibe, model: string) => Promise<EncodedVibe>,
 ): Promise<ApiPayload> {
   if (!args.prompt.trim()) throw new Error('prompt 不能为空')
-  const requested = args.model ?? defaultModel
+  const requested = args.model ?? settings.model
   const action = args.action === 'enhance' ? 'img2img' : args.action ?? 'generate'
   const { targetId, model } = resolveGenerationModel(requested, action)
 
   const p: ApiPayload = {
     params_version: model.family >= 5 ? 4 : 3,
-    width: 1024, height: 1024, steps: 28, scale: 6,
+    width: 1024, height: 1024, scale: 6,
     sampler: 'k_euler_ancestral', noise_schedule: 'karras',
     seed: randomInt(0, 2 ** 32), n_samples: 1, image_format: 'png',
     negative_prompt: args.negative_prompt ?? '',
     cfg_rescale: 0, deliberate_euler_ancestral_bug: false, prefer_brownian: true,
     ...args.parameters,
+    steps: settings.steps,
   }
   delete p.stream
 
@@ -89,9 +90,6 @@ export async function generationPayload(
   }
   for (const name of ['width', 'height'] as const) validateDimension(name, p[name])
 
-  if (typeof p.steps !== 'number' || !Number.isInteger(p.steps) || p.steps < 1 || p.steps > MAX_STEPS) {
-    throw new Error(`steps 必须为 1..${MAX_STEPS} 的整数`)
-  }
   if (typeof p.n_samples !== 'number' || !Number.isInteger(p.n_samples) || p.n_samples < 1 || p.n_samples > MAX_SAMPLES) {
     throw new Error(`n_samples 必须为 1..${MAX_SAMPLES} 的整数`)
   }

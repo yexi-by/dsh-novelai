@@ -147,7 +147,7 @@ export function registerTools(ctx: Context, client: NovelAIClient, settings: () 
       use_coords: bool('Use explicit character positions; otherwise layout is automatic.'),
       vibes: array(object({ image_path: text('Original image; V4+ caches the paid encoding for reuse.'), encoding_path: text('Previously returned .nai-vibe.json; avoids another encoding charge.'), strength: number('0..1, default 0.6'), information_extracted: number('0..1, default 1 for new encodings; cached encoding keeps its own value.') })),
       references: array(object({ image_path: { ...text('Reference image, automatically resized and black-padded to the accepted canvas.'), required: true }, type: { type: 'string', enum: ['character', 'style', 'character&style'] }, fidelity: number('0..1, default 1'), strength: number('0..1, default 1'), information_extracted: number('0..1, default 1') })),
-      parameters: { ...generationParameters, description: 'Complete official generation parameter object. width/height, steps, scale, sampler, seed, n_samples, strength/noise, quality, SMEA, Variety+, ControlNet, alpha and upscaling. Top-level image paths and characters are encoded by the plugin. Raw image fields, if used, require base64.' },
+      parameters: { ...generationParameters, description: 'Generation parameter object. width/height, scale, sampler, seed, n_samples, strength/noise, quality, SMEA, Variety+, ControlNet, alpha and upscaling. Top-level image paths and characters are encoded by the plugin. Raw image fields, if used, require base64.' },
     },
     output: imageOutput,
     presentCall: args => {
@@ -177,7 +177,7 @@ export function registerTools(ctx: Context, client: NovelAIClient, settings: () 
           if (!encoded.cached) quotaTouched = true
           return encoded.value
         }
-        const payload = await generationPayload(args, settings().model, io.readImage, encode)
+        const payload = await generationPayload(args, settings(), io.readImage, encode)
         const images = await client.images('/ai/generate-image', payload, exec.signal)
         quotaTouched = true
         const seed = (payload.parameters as ApiPayload).seed as number

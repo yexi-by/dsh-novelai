@@ -37,6 +37,7 @@ export async function toolRig(client, cwd, directory = 'novelai-output', options
   const definitions = new Map()
   const state = {
     model: options.model ?? 'nai-diffusion-5-full',
+    steps: options.steps ?? 28,
     outputDirectory: directory,
     timeoutSeconds: 300,
     policy: options.policy,
@@ -49,7 +50,7 @@ export async function toolRig(client, cwd, directory = 'novelai-output', options
     fs: ctx.fs,
     workingDirectory: { ensure: async () => cwd },
     get(key) { return key === 'sandboxPolicy' && state.policy ? sandboxService : undefined },
-  }, client, () => ({ model: state.model, outputDirectory: state.outputDirectory, timeoutSeconds: state.timeoutSeconds }), options.hooks)
+  }, client, () => ({ model: state.model, steps: state.steps, outputDirectory: state.outputDirectory, timeoutSeconds: state.timeoutSeconds }), options.hooks)
   return {
     definitions,
     state,

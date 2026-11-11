@@ -50,13 +50,15 @@ function createSettingsFace(ctx: Context, controller: AccountController) {
       const outputDirectory = settings.outputDirectory.trim()
       if (!outputDirectory) throw new Error('图片输出目录不能为空')
       if (!MODELS.some(model => model.id === settings.model)) throw new Error(`不支持的默认模型：${settings.model}`)
+      if (!Number.isInteger(settings.steps) || settings.steps < 1 || settings.steps > 50) throw new Error('生成步数必须为 1..50 的整数')
       if (!Number.isFinite(settings.timeoutSeconds) || settings.timeoutSeconds < 1) throw new Error('请求超时必须为不小于 1 的数字')
       const normalized: Settings = {
         model: settings.model,
+        steps: settings.steps,
         outputDirectory,
         timeoutSeconds: Math.round(settings.timeoutSeconds),
       }
-      for (const key of ['model', 'outputDirectory', 'timeoutSeconds'] as const) {
+      for (const key of ['model', 'steps', 'outputDirectory', 'timeoutSeconds'] as const) {
         if (!await form.set(key, normalized[key])) throw new Error('设置未保存，请刷新后重试')
       }
       return normalized
@@ -198,6 +200,9 @@ function NovelAICard({
         <select style={inputStyle} value={draft.model} onChange={event => setDraft({ ...draft, model: event.target.value })}>
           {MODELS.map(model => <option key={model.id} value={model.id}>{model.label}</option>)}
         </select>
+      </label>
+      <label style={{ display: 'grid', gap: 8 }}>{t('steps')}
+        <input style={inputStyle} type="number" min={1} max={50} step={1} value={draft.steps} onChange={event => setDraft({ ...draft, steps: Number(event.target.value) })} />
       </label>
       <label style={{ display: 'grid', gap: 8 }}>{t('directory')}
         <input style={inputStyle} value={draft.outputDirectory} onChange={event => setDraft({ ...draft, outputDirectory: event.target.value })} />

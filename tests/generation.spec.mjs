@@ -8,6 +8,7 @@ import { zipSync } from 'fflate'
 import { harness } from '../scripts/dsh-runtime.mjs'
 import { generationPayload, prepareReference, parseVibe } from '../src/node/generation.ts'
 import { modelInfo } from '../src/node/models.ts'
+import { DEFAULT_SETTINGS } from '../src/shared.ts'
 import { formatImageMarkdown, saveImages } from '../src/node/storage.ts'
 import { decodeImages } from '../src/node/api.ts'
 
@@ -20,26 +21,26 @@ const encode = async () => { throw new Error('unexpected paid encoding') }
 test('多角色基础与负向 caption 一一对应，坐标和全部高级参数传给真实请求结构', async () => {
   const body = await generationPayload({ prompt: '2girls, park', negative_prompt: 'lowres', characters: [
     { prompt: 'girl, black hair', negative_prompt: 'hat', positions: [{ x: 0.2, y: 0.7 }] }, { prompt: 'girl, blonde hair' },
-  ], parameters: { width: 1216, height: 832, seed: 21, n_samples: 2, straight_alpha: true, tag_hint_qt: 0, upscale: { declared_blur_sigma: 0.35 } } }, 'nai-diffusion-5-full', read, encode)
+  ], parameters: { width: 1216, height: 832, steps: 32, seed: 21, n_samples: 2, straight_alpha: true, tag_hint_qt: 0, upscale: { declared_blur_sigma: 0.35 } } }, DEFAULT_SETTINGS, read, encode)
   assert.equal(body.model, 'nai-diffusion-5-full')
   assert.equal(body.parameters.v4_prompt.caption.char_captions[0].char_caption, 'girl, black hair')
   assert.equal(body.parameters.v4_negative_prompt.caption.char_captions[0].char_caption, 'hat')
   assert.deepEqual(body.parameters.v4_prompt.caption.char_captions[0].centers, [{ x: 0.2, y: 0.7 }])
   assert.equal(body.parameters.v4_prompt.use_coords, true)
   assert.equal(body.parameters.n_samples, 2)
+  assert.equal(body.parameters.steps, 28)
   assert.equal(body.parameters.straight_alpha, true)
   assert.equal(body.parameters.upscale.declared_blur_sigma, 0.35)
 })
 
 test('不支持的模型组合或非法参数在编码或扣费请求前报错', async () => {
-  await assert.rejects(generationPayload({ prompt: 'landscape', vibes: [{ image_path: 'style.png' }] }, 'nai-diffusion-5-full', read, encode), /不支持 Vibe/)
-  await assert.rejects(generationPayload({ prompt: 'portrait', references: [{ image_path: 'ref.png' }] }, 'nai-diffusion-5-full', read, encode), /只支持 V4.5/)
-  await assert.rejects(generationPayload({ prompt: 'portrait', model: 'nai-diffusion-4-5-full', references: [{ image_path: 'r' }], vibes: [{ image_path: 'v' }] }, 'nai-diffusion-5-full', read, encode), /同时使用/)
-  await assert.rejects(generationPayload({ prompt: 'portrait', parameters: { width: 1000 } }, 'nai-diffusion-5-full', read, encode), /64 倍数/)
-  await assert.rejects(generationPayload({ prompt: 'portrait', parameters: { width: 4096 } }, 'nai-diffusion-5-full', read, encode), /64\.\.2048/)
-  await assert.rejects(generationPayload({ prompt: 'portrait', parameters: { steps: 60 } }, 'nai-diffusion-5-full', read, encode), /steps/)
-  await assert.rejects(generationPayload({ prompt: 'portrait', parameters: { upscale: { declared_blur_sigma: 0.25 } } }, 'nai-diffusion-5-full', read, encode), /declared_blur_sigma/)
-  await assert.rejects(generationPayload({ prompt: '2girls', characters: [{ prompt: 'girl' }], parameters: { v4_prompt: { caption: { base_caption: 'x', char_captions: [] } } } }, 'nai-diffusion-5-full', read, encode), /不能同时传入/)
+  await assert.rejects(generationPayload({ prompt: 'landscape', vibes: [{ image_path: 'style.png' }] }, DEFAULT_SETTINGS, read, encode), /不支持 Vibe/)
+  await assert.rejects(generationPayload({ prompt: 'portrait', references: [{ image_path: 'ref.png' }] }, DEFAULT_SETTINGS, read, encode), /只支持 V4.5/)
+  await assert.rejects(generationPayload({ prompt: 'portrait', model: 'nai-diffusion-4-5-full', references: [{ image_path: 'r' }], vibes: [{ image_path: 'v' }] }, DEFAULT_SETTINGS, read, encode), /同时使用/)
+  await assert.rejects(generationPayload({ prompt: 'portrait', parameters: { width: 1000 } }, DEFAULT_SETTINGS, read, encode), /64 倍数/)
+  await assert.rejects(generationPayload({ prompt: 'portrait', parameters: { width: 4096 } }, DEFAULT_SETTINGS, read, encode), /64\.\.2048/)
+  await assert.rejects(generationPayload({ prompt: 'portrait', parameters: { upscale: { declared_blur_sigma: 0.25 } } }, DEFAULT_SETTINGS, read, encode), /declared_blur_sigma/)
+  await assert.rejects(generationPayload({ prompt: '2girls', characters: [{ prompt: 'girl' }], parameters: { v4_prompt: { caption: { base_caption: 'x', char_captions: [] } } } }, DEFAULT_SETTINGS, read, encode), /不能同时传入/)
 })
 
 test('局部重绘补齐 strength、img2img、add_original_image，正确处理透明 RGBA 蒙版与 V4.5 inpainting 规格', async () => {
@@ -58,7 +59,7 @@ test('局部重绘补齐 strength、img2img、add_original_image，正确处理�
   const body = await generationPayload({
     action: 'infill', model: 'nai-diffusion-5-curated', prompt: 'flower',
     image_path: 'in.png', mask_path: 'mask.png', parameters: { width: 64, height: 128 },
-  }, 'nai-diffusion-5-full', readByPath, encode)
+  }, DEFAULT_SETTINGS, readByPath, encode)
 
   assert.equal(body.model, 'nai-diffusion-4-5-curated-inpainting')
   assert.equal(body.action, 'infill')
@@ -97,7 +98,7 @@ test('EXIF 旋转图片在图生图与 Precise Reference 中按视觉方向自�
 
   const body = await generationPayload({
     action: 'img2img', prompt: 'portrait', image_path: 'rotated.jpg',
-  }, 'nai-diffusion-5-full', async () => exifRotatedJpeg, encode)
+  }, DEFAULT_SETTINGS, async () => exifRotatedJpeg, encode)
   assert.equal(body.parameters.width, 64)
   assert.equal(body.parameters.height, 128)
 })
@@ -106,7 +107,7 @@ test('Precise Reference 真正完成缩放填充，fidelity 映射为 secondary 
   const reference = await prepareReference(png)
   const info = await sharp(reference).metadata()
   assert.deepEqual([info.width, info.height], [1024, 1536])
-  const body = await generationPayload({ model: 'nai-diffusion-4-5-full', prompt: 'portrait', references: [{ image_path: 'ref.png', type: 'style', fidelity: 0.8 }] }, 'nai-diffusion-5-full', read, encode)
+  const body = await generationPayload({ model: 'nai-diffusion-4-5-full', prompt: 'portrait', references: [{ image_path: 'ref.png', type: 'style', fidelity: 0.8 }] }, DEFAULT_SETTINGS, read, encode)
   assert.equal(body.parameters.director_reference_descriptions[0].caption.base_caption, 'style')
   assert.ok(Math.abs(body.parameters.director_reference_secondary_strength_values[0] - 0.2) < 1e-10)
   assert.equal(body.parameters.director_reference_strength_values[0], 1)

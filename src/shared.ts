@@ -6,12 +6,14 @@ export const BLUR_SIGMA_VALUES = [0, 0.3, 0.35, 0.4, 0.45, 0.5] as const
 
 export interface Settings {
   model: string
+  steps: number
   outputDirectory: string
   timeoutSeconds: number
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   model: DEFAULT_MODEL,
+  steps: 28,
   outputDirectory: 'novelai-output',
   timeoutSeconds: 300,
 }

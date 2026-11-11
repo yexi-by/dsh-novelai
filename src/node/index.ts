@@ -15,6 +15,7 @@ export const name = 'novelai'
 export const inject = ['tools', 'skills', 'credentials', 'fs', 'workingDirectory', 'settings']
 export const Config = z.object({
   model: z.string().min(1).default(DEFAULT_SETTINGS.model),
+  steps: z.number().min(1).max(50).step(1).default(DEFAULT_SETTINGS.steps),
   outputDirectory: z.string().min(1).default(DEFAULT_SETTINGS.outputDirectory),
   timeoutSeconds: z.number().min(1).default(DEFAULT_SETTINGS.timeoutSeconds),
 }).volatile()

@@ -51,7 +51,7 @@ Vibe Transfer 与 Precise Reference 当前互斥。V5 Curated 的 `infill` 沿�
 
 ## 编辑、重绘与参考图
 
-常用扩散参数位于 `parameters`（如 `width`、`height`、`steps`（1..50）、`scale`、`sampler`、`seed`、`n_samples`、`strength`、`noise`、`cfg_rescale`、`straight_alpha`、`upscale`）。
+常用扩散参数位于 `parameters`（如 `width`、`height`、`scale`、`sampler`、`seed`、`n_samples`、`strength`、`noise`、`cfg_rescale`、`straight_alpha`、`upscale`）。
 
 - **图生图与 Enhance**：传入 `image_path`，未指定宽高时自动对齐源图比例与 64 倍数（支持自动识别 EXIF 旋转）。`img2img` 默认 `strength: 0.7, noise: 0.2`；`enhance` 默认 `strength: 0.2, noise: 0`。
 - **局部重绘（`infill`）**：传入 `image_path` 与 `mask_path`（白色 `#FFFFFF` 重绘、黑色 `#000000` 保留，透明背景按黑色保留处理）。插件默认开启 `add_original_image: true` 保护未遮罩区域原貌，`strength` 默认 `1`。若用户只指定了要修改的部位而未提供现成蒙版文件，先按源图尺寸生成黑白 PNG 蒙版再调用 `infill`；扩图同理先拼接扩展画布与对应白色扩展区蒙版。

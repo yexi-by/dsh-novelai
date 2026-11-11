@@ -67,6 +67,9 @@
       "@deepseek-ai/dsh-timeout": [
         "../../deepseek-harness/packages/util/timeout/lib/types/index.d.ts"
       ],
+      "@deepseek-ai/dsh-client-store": [
+        "../../deepseek-harness/packages/client/store/lib/types/index.d.ts"
+      ],
       "@deepseek-ai/dsh-client-ui-primitives": [
         "../../deepseek-harness/packages/client/ui-primitives/lib/types/index.d.ts"
       ],
@@ -81,6 +84,9 @@
       ],
       "@deepseek-ai/dsh-client-ui-renderer/client": [
         "../../deepseek-harness/packages/client/ui-renderer/lib/types/client/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-client-ui-session/client": [
+        "../../deepseek-harness/packages/client/ui-session/lib/types/client/index.d.ts"
       ],
       "@deepseek-ai/dsh-client-locale/client": [
         "../../deepseek-harness/packages/client/locale/lib/types/client/index.d.ts"

@@ -29,7 +29,12 @@ function presentImageResult(baseTitle: string, result: ToolResult): ToolResultVi
   return { card: 'generic', title: parts.join(' · ') }
 }
 
-export function registerTools(ctx: Context, client: NovelAIClient, settings: () => Settings): void {
+export interface ToolAccountHooks {
+  onQuotaUsed?: () => void
+  onAccountData?: (raw: unknown) => void
+}
+
+export function registerTools(ctx: Context, client: NovelAIClient, settings: () => Settings, hooks?: ToolAccountHooks): void {
   const jsonOutput = {
     schema: { type: 'json' as const },
     render: (_args: unknown, value: unknown) => [{ type: 'text' as const, text: JSON.stringify(value) }],
@@ -163,19 +168,27 @@ export function registerTools(ctx: Context, client: NovelAIClient, settings: () 
     presentResult: (args, result) => presentImageResult(actionTitle(args.action), result),
     execute: async (args, exec) => {
       const io = await files(exec)
-      const encode = async (vibe: Vibe, model: string): Promise<EncodedVibe> => {
-        if (vibe.encoding_path) return parseVibe((await io.read(vibe.encoding_path)).toString('utf8'), model, vibe.information_extracted)
-        if (!vibe.image_path) throw new Error('每个 Vibe 需要 image_path 或 encoding_path')
-        return (await encodeVibe(client, await io.readImage(vibe.image_path), model, vibe.information_extracted ?? 1, io.cache, exec.signal, {}, io.policy)).value
+      let quotaTouched = false
+      try {
+        const encode = async (vibe: Vibe, model: string): Promise<EncodedVibe> => {
+          if (vibe.encoding_path) return parseVibe((await io.read(vibe.encoding_path)).toString('utf8'), model, vibe.information_extracted)
+          if (!vibe.image_path) throw new Error('每个 Vibe 需要 image_path 或 encoding_path')
+          const encoded = await encodeVibe(client, await io.readImage(vibe.image_path), model, vibe.information_extracted ?? 1, io.cache, exec.signal, {}, io.policy)
+          if (!encoded.cached) quotaTouched = true
+          return encoded.value
+        }
+        const payload = await generationPayload(args, settings().model, io.readImage, encode)
+        const images = await client.images('/ai/generate-image', payload, exec.signal)
+        quotaTouched = true
+        const seed = (payload.parameters as ApiPayload).seed as number
+        for (const [index, image] of images.entries()) image.seed ??= (seed + index) % 2 ** 32
+        return await saveImages(images, io.cwd, io.directory, {
+          operation: args.action ?? 'generate', model: payload.model,
+          input: safeMetadata(args), request: safeMetadata(payload),
+        }, exec.signal, io.policy)
+      } finally {
+        if (quotaTouched) hooks?.onQuotaUsed?.()
       }
-      const payload = await generationPayload(args, settings().model, io.readImage, encode)
-      const images = await client.images('/ai/generate-image', payload, exec.signal)
-      const seed = (payload.parameters as ApiPayload).seed as number
-      for (const [index, image] of images.entries()) image.seed ??= (seed + index) % 2 ** 32
-      return saveImages(images, io.cwd, io.directory, {
-        operation: args.action ?? 'generate', model: payload.model,
-        input: safeMetadata(args), request: safeMetadata(payload),
-      }, exec.signal, io.policy)
     },
   })
 
@@ -205,6 +218,7 @@ export function registerTools(ctx: Context, client: NovelAIClient, settings: () 
       const info = await sharp(data).metadata()
       const payload = { image: data.toString('base64'), width: info.width!, height: info.height!, req_type: args.operation, prompt: args.prompt ?? '', defry: args.defry ?? 0 }
       const images = await client.images('/ai/augment-image', payload, exec.signal)
+      hooks?.onQuotaUsed?.()
       return saveImages(images, io.cwd, io.directory, { operation: args.operation, input: args }, exec.signal, io.policy)
     },
   })
@@ -232,6 +246,7 @@ export function registerTools(ctx: Context, client: NovelAIClient, settings: () 
       const payload: ApiPayload = { model: args.model ?? settings().model, image: normalized.data.toString('base64') }
       if (args.declared_blur_sigma !== undefined) payload.declared_blur_sigma = args.declared_blur_sigma
       const images = await client.images('/ai/upscale', payload, exec.signal)
+      hooks?.onQuotaUsed?.()
       for (const image of images) if (image.seed === 0) delete image.seed
       return saveImages(images, io.cwd, io.directory, { operation: 'upscale', model: payload.model, input: args }, exec.signal, io.policy)
     },
@@ -274,6 +289,7 @@ export function registerTools(ctx: Context, client: NovelAIClient, settings: () 
       })()
       const targetModel = args.model ?? (canUseConfigured ? configured : 'nai-diffusion-4-5-full')
       const result = await encodeVibe(client, await io.readImage(args.image_path), targetModel, args.information_extracted ?? 1, io.cache, exec.signal, options, io.policy)
+      if (!result.cached) hooks?.onQuotaUsed?.()
       return { encoding_path: result.path, cached: result.cached, model: result.value.model, information_extracted: result.value.information_extracted }
     },
   })
@@ -293,7 +309,11 @@ export function registerTools(ctx: Context, client: NovelAIClient, settings: () 
     parameters: {},
     concurrencySafe: true,
     presentCall: () => ({ card: 'generic', kind: 'fetch', title: 'NovelAI 账户与额度查询' }),
-    execute: async (_args, exec) => client.json('/user/subscription', undefined, exec.signal),
+    execute: async (_args, exec) => {
+      const data = await client.json('/user/subscription', undefined, exec.signal)
+      try { hooks?.onAccountData?.(data) } catch { /* 忽略非致命缓存同步异常 */ }
+      return data
+    },
   })
 
   register<{ include_parameters?: boolean }>({

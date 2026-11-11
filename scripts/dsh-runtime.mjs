@@ -49,7 +49,7 @@ export async function toolRig(client, cwd, directory = 'novelai-output', options
     fs: ctx.fs,
     workingDirectory: { ensure: async () => cwd },
     get(key) { return key === 'sandboxPolicy' && state.policy ? sandboxService : undefined },
-  }, client, () => ({ model: state.model, outputDirectory: state.outputDirectory, timeoutSeconds: state.timeoutSeconds }))
+  }, client, () => ({ model: state.model, outputDirectory: state.outputDirectory, timeoutSeconds: state.timeoutSeconds }), options.hooks)
   return {
     definitions,
     state,

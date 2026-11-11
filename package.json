@@ -2,7 +2,7 @@
   "name": "dsh-novelai",
   "version": "0.1.0",
   "private": true,
-  "description": "NovelAI 图像生成、编辑、参考图与提示词 Skill 的 DSH 插件",
+  "description": "NovelAI 图像生成、编辑、参考图、首页血条与 Anlas 额度展示及提示词 Skill 的 DSH 插件",
   "type": "module",
   "main": "lib/node.js",
   "exports": {
@@ -16,7 +16,18 @@
     "bundle": {"patch": "./cordis.patch.yml"},
     "client": {
       "platform": "web",
-      "inject": ["@deepseek-ai/dsh-client-connection", "@deepseek-ai/dsh-client-locale", "@deepseek-ai/dsh-api-remotes", "@deepseek-ai/dsh-client-ui-settings", "@deepseek-ai/dsh-client-ui-plugin-manager"]
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-client-ui-chat",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-session",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-plugin-manager",
+        "configForms"
+      ]
     }
   },
   "scripts": {

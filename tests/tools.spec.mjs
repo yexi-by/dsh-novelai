@@ -42,27 +42,30 @@ test('真实工具 schema、HTTP 请求、凭据、图片保存、放大与损�
   const rig = await toolRig(client, directory)
   try {
     await writeFile(join(directory, 'input.png'), png)
-    const generated = await rig.call('novelai_generate', { prompt: 'landscape', parameters: { width: 64, height: 64, n_samples: 2, seed: 15, tag_hint_transparent_background: true } })
+    const generated = await rig.call('novelai_generate', { prompt: 'landscape', transparent_background: true, parameters: { width: 64, height: 64, seed: 15 } })
     assert.equal(generated.images.length, 2)
     assert.equal(calls[0].auth, `Bearer ${token}`)
     assert.match(calls[0].accept, /application\/zip/)
-    assert.equal(calls[0].body.parameters.n_samples, 2)
-    assert.equal(calls[0].body.parameters.steps, 28)
+    assert.equal(calls[0].body.parameters.n_samples, 1)
+    assert.equal(calls[0].body.parameters.steps, 23)
+    assert.equal(calls[0].body.parameters.scale, 7)
     assert.equal(calls[0].body.parameters.tag_hint_transparent_background, true)
+    assert.equal(calls[0].body.input, 'landscape, transparent background, very aesthetic, masterpiece, no text')
     assert.deepEqual(await readFile(generated.images[0].path), png)
     assert.equal(generated.images[1].seed, 16)
     const metadata = await readFile(generated.metadata_path, 'utf8')
     assert.ok(!metadata.includes(token))
 
     const count = calls.length
-    await assert.rejects(rig.call('novelai_generate', { prompt: 'test', parameters: { n_samples: '2' } }))
+    await assert.rejects(rig.call('novelai_generate', { prompt: 'test', parameters: { n_samples: 2 } }), /n_samples.*not a declared property/)
     await assert.rejects(rig.call('novelai_generate', { prompt: 'test', parameters: { steps: 32 } }), /steps.*not a declared property/)
+    await assert.rejects(rig.call('novelai_generate', { prompt: 'test', parameters: { sampler: 'k_euler' } }), /sampler.*not a declared property/)
     assert.equal(calls.length, count)
 
     rig.state.steps = 20
     await rig.call('novelai_generate', { prompt: 'landscape', parameters: { width: 64, height: 64 } })
     assert.equal(calls.at(-1).body.parameters.steps, 20)
-    rig.state.steps = 28
+    rig.state.steps = 23
 
     const augmented = await rig.call('novelai_augment', { image_path: 'input.png', operation: 'bg-removal' })
     assert.equal(augmented.images.length, 3)
@@ -106,6 +109,10 @@ test('真实工具 schema、HTTP 请求、凭据、图片保存、放大与损�
     assert.ok(capabilities.parameters['image.RequestParameters'].properties.director_reference_images)
     assert.equal('steps' in capabilities.parameters['image.RequestParameters'].properties, false)
     assert.equal('steps' in rig.definitions.get('novelai_generate').parameters.properties.parameters.properties, false)
+    assert.deepEqual(Object.keys(rig.definitions.get('novelai_generate').parameters.properties.parameters.properties).sort(),
+      ['add_original_image', 'color_correct', 'extra_noise_seed', 'height', 'image_format', 'noise', 'seed', 'strength', 'width'])
+    assert.equal(capabilities.generation_settings.steps, 23)
+    assert.equal(capabilities.free_range.max_area, 1024 * 1024)
     assert.equal(rig.definitions.size, 7)
 
     // 只读工具开启并发安全，付费写工具保持独占

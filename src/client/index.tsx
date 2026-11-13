@@ -10,8 +10,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
-import { CREDENTIAL_REF, DEFAULT_SETTINGS, MODELS } from '../shared.ts'
-import type { Settings } from '../shared.ts'
+import { CREDENTIAL_REF, DEFAULT_SETTINGS, FREE_MAX_STEPS, MODELS, normalizeSettings, QUALITY_PRESETS, SAMPLERS, UC_PRESETS } from '../shared.ts'
+import type { QualityPresetId, SamplerId, Settings, UcPresetId } from '../shared.ts'
 import { createAccountController } from './controller.ts'
 import type { AccountController, AccountSource, AccountView } from './controller.ts'
 import { en, NS, zh } from './locales.ts'
@@ -47,18 +47,8 @@ function createSettingsFace(ctx: Context, controller: AccountController) {
       return next
     },
     async save(settings: Settings): Promise<Settings> {
-      const outputDirectory = settings.outputDirectory.trim()
-      if (!outputDirectory) throw new Error('图片输出目录不能为空')
-      if (!MODELS.some(model => model.id === settings.model)) throw new Error(`不支持的默认模型：${settings.model}`)
-      if (!Number.isInteger(settings.steps) || settings.steps < 1 || settings.steps > 50) throw new Error('生成步数必须为 1..50 的整数')
-      if (!Number.isFinite(settings.timeoutSeconds) || settings.timeoutSeconds < 1) throw new Error('请求超时必须为不小于 1 的数字')
-      const normalized: Settings = {
-        model: settings.model,
-        steps: settings.steps,
-        outputDirectory,
-        timeoutSeconds: Math.round(settings.timeoutSeconds),
-      }
-      for (const key of ['model', 'steps', 'outputDirectory', 'timeoutSeconds'] as const) {
+      const normalized = normalizeSettings(settings)
+      for (const key of Object.keys(normalized) as (keyof Settings)[]) {
         if (!await form.set(key, normalized[key])) throw new Error('设置未保存，请刷新后重试')
       }
       return normalized
@@ -103,7 +93,7 @@ function NovelAICard({
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
 
-  useEffect(() => { if (config.value) setDraft(config.value) }, [config.value])
+  useEffect(() => { if (config.value) setDraft({ ...DEFAULT_SETTINGS, ...config.value }) }, [config.value])
   useEffect(() => {
     let active = true
     void status().then(next => {
@@ -199,9 +189,37 @@ function NovelAICard({
           {MODELS.map(model => <option key={model.id} value={model.id}>{model.label}</option>)}
         </select>
       </label>
-      <label style={{ display: 'grid', gap: 8 }}>{t('steps')}
-        <input style={inputStyle} type="number" min={1} max={50} step={1} value={draft.steps} onChange={event => setDraft({ ...draft, steps: Number(event.target.value) })} />
+      <h4 style={{ margin: '4px 0 0' }}>{t('generationSection')}</h4>
+      <p style={{ margin: 0, color: 'var(--dsw-alias-label-secondary)', fontSize: 13 }}>{t('generationHint')}</p>
+      <label style={{ display: 'grid', gap: 8 }}>{t('sampler')}
+        <select style={inputStyle} value={draft.sampler} onChange={event => setDraft({ ...draft, sampler: event.target.value as SamplerId })}>
+          {SAMPLERS.map(sampler => <option key={sampler.id} value={sampler.id}>{sampler.label}{sampler.id === DEFAULT_SETTINGS.sampler ? ` (${t('official')})` : ''}</option>)}
+        </select>
       </label>
+      <label style={{ display: 'grid', gap: 8 }}>{t('steps')}
+        <input style={inputStyle} type="number" min={1} max={FREE_MAX_STEPS} step={1} value={draft.steps} onChange={event => setDraft({ ...draft, steps: Number(event.target.value) })} />
+      </label>
+      <label style={{ display: 'grid', gap: 8 }}>{t('scale')}
+        <input style={inputStyle} type="number" min={0} max={10} step={0.1} value={draft.scale} onChange={event => setDraft({ ...draft, scale: Number(event.target.value) })} />
+      </label>
+      <label style={{ display: 'grid', gap: 8 }}>{t('cfgRescale')}
+        <input style={inputStyle} type="number" min={0} max={1} step={0.02} value={draft.cfgRescale} onChange={event => setDraft({ ...draft, cfgRescale: Number(event.target.value) })} />
+      </label>
+      <label style={{ display: 'grid', gap: 8 }}>{t('qualityPreset')}
+        <select style={inputStyle} value={draft.qualityPreset} onChange={event => setDraft({ ...draft, qualityPreset: event.target.value as QualityPresetId })}>
+          {QUALITY_PRESETS.map(id => <option key={id} value={id}>{t(`quality_${id}`)}</option>)}
+        </select>
+      </label>
+      <label style={{ display: 'grid', gap: 8 }}>{t('ucPreset')}
+        <select style={inputStyle} value={draft.ucPreset} onChange={event => setDraft({ ...draft, ucPreset: event.target.value as UcPresetId })}>
+          {UC_PRESETS.map(id => <option key={id} value={id}>{t(`uc_${id}`)}</option>)}
+        </select>
+      </label>
+      <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <input type="checkbox" checked={draft.autoText} onChange={event => setDraft({ ...draft, autoText: event.target.checked })} />
+        {t('autoText')}
+      </label>
+      <h4 style={{ margin: '4px 0 0' }}>{t('outputSection')}</h4>
       <label style={{ display: 'grid', gap: 8 }}>{t('directory')}
         <input style={inputStyle} value={draft.outputDirectory} onChange={event => setDraft({ ...draft, outputDirectory: event.target.value })} />
       </label>

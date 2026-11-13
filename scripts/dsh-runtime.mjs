@@ -37,7 +37,7 @@ export async function toolRig(client, cwd, directory = 'novelai-output', options
   const definitions = new Map()
   const state = {
     model: options.model ?? 'nai-diffusion-5-full',
-    steps: options.steps ?? 28,
+    steps: options.steps ?? 23,
     outputDirectory: directory,
     timeoutSeconds: 300,
     policy: options.policy,

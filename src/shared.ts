@@ -4,18 +4,78 @@ export const DEFAULT_MODEL = 'nai-diffusion-5-full'
 export const API_ORIGIN = 'https://image.novelai.net'
 export const BLUR_SIGMA_VALUES = [0, 0.3, 0.35, 0.4, 0.45, 0.5] as const
 
+/** Opus 免费生图上限：单张、面积不超过 1024×1024、步数不超过 28。 */
+export const FREE_MAX_AREA = 1024 * 1024
+export const FREE_MAX_STEPS = 28
+
+/** 插件页面可选的采样器（与官网 V5 可用采样器一致，首项为官方默认）。 */
+export const SAMPLERS = [
+  { id: 'k_euler_ancestral', label: 'Euler Ancestral' },
+  { id: 'k_dpmpp_2m', label: 'DPM++ 2M' },
+  { id: 'k_euler', label: 'Euler' },
+  { id: 'k_dpmpp_2s_ancestral', label: 'DPM++ 2S Ancestral' },
+  { id: 'k_dpmpp_sde', label: 'DPM++ SDE' },
+  { id: 'k_dpm_2', label: 'DPM2' },
+] as const
+export type SamplerId = (typeof SAMPLERS)[number]['id']
+
+export const QUALITY_PRESETS = ['standard', 'light', 'none'] as const
+export type QualityPresetId = (typeof QUALITY_PRESETS)[number]
+export const UC_PRESETS = ['heavy', 'light', 'humanFocus', 'furryFocus', 'none'] as const
+export type UcPresetId = (typeof UC_PRESETS)[number]
+
 export interface Settings {
   model: string
   steps: number
+  scale: number
+  sampler: SamplerId
+  cfgRescale: number
+  qualityPreset: QualityPresetId
+  ucPreset: UcPresetId
+  autoText: boolean
   outputDirectory: string
   timeoutSeconds: number
 }
 
+/** 默认值与 NovelAI 官网 V5 默认生成配置一致。 */
 export const DEFAULT_SETTINGS: Settings = {
   model: DEFAULT_MODEL,
-  steps: 28,
+  steps: 23,
+  scale: 7,
+  sampler: 'k_euler_ancestral',
+  cfgRescale: 0,
+  qualityPreset: 'standard',
+  ucPreset: 'heavy',
+  autoText: true,
   outputDirectory: 'novelai-output',
   timeoutSeconds: 300,
+}
+
+/** 校验并规范化插件设置；前端保存与 Node 端读取共用，避免出现超出免费范围的配置。 */
+export function normalizeSettings(input: Partial<Settings>): Settings {
+  const value = { ...DEFAULT_SETTINGS, ...input }
+  const outputDirectory = String(value.outputDirectory ?? '').trim()
+  if (!outputDirectory) throw new Error('图片输出目录不能为空')
+  if (!MODELS.some(model => model.id === value.model)) throw new Error(`不支持的默认模型：${value.model}`)
+  if (!Number.isInteger(value.steps) || value.steps < 1 || value.steps > FREE_MAX_STEPS) throw new Error(`生成步数必须为 1..${FREE_MAX_STEPS} 的整数（超过 ${FREE_MAX_STEPS} 步会消耗 Anlas）`)
+  if (!Number.isFinite(value.scale) || value.scale < 0 || value.scale > 10) throw new Error('Prompt Guidance 必须位于 0..10')
+  if (!Number.isFinite(value.cfgRescale) || value.cfgRescale < 0 || value.cfgRescale > 1) throw new Error('Prompt Guidance Rescale 必须位于 0..1')
+  if (!SAMPLERS.some(sampler => sampler.id === value.sampler)) throw new Error(`不支持的采样器：${value.sampler}`)
+  if (!QUALITY_PRESETS.includes(value.qualityPreset)) throw new Error(`不支持的质量标签预设：${value.qualityPreset}`)
+  if (!UC_PRESETS.includes(value.ucPreset)) throw new Error(`不支持的负面预设：${value.ucPreset}`)
+  if (!Number.isFinite(value.timeoutSeconds) || value.timeoutSeconds < 1) throw new Error('请求超时必须为不小于 1 的数字')
+  return {
+    model: value.model,
+    steps: value.steps,
+    scale: Math.round(value.scale * 10) / 10,
+    sampler: value.sampler,
+    cfgRescale: Math.round(value.cfgRescale * 100) / 100,
+    qualityPreset: value.qualityPreset,
+    ucPreset: value.ucPreset,
+    autoText: Boolean(value.autoText),
+    outputDirectory,
+    timeoutSeconds: Math.round(value.timeoutSeconds),
+  }
 }
 
 export interface SavedImage {

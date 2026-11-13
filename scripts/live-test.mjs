@@ -141,9 +141,8 @@ try {
       })
 
       await run('v5-text-comic', 'novelai_generate', {
-        prompt: '1girl, solo, adult woman, barista apron, smiling, holding coffee mug, speech bubble, text, english text, cozy cafe, high complexity, very aesthetic, best quality\nThe barista holds a warm mug and greets the viewer with a speech bubble.\nText: Good morning!',
-        negative_prompt: 'lowres, artistic error, scan artifacts, worst quality, jpeg artifacts',
-        parameters: { width: 832, height: 1216, seed: 20261111, tag_hint_qt: 0 },
+        prompt: '1girl, solo, adult woman, barista apron, smiling, holding coffee mug, speech bubble, text, chinese text, cozy cafe, high complexity\nThe barista holds a warm mug and greets the viewer, saying “早上好！” in a speech bubble.',
+        parameters: { width: 832, height: 1216, seed: 20261111 },
       })
 
       for (const operation of ['lineart', 'sketch', 'colorize', 'emotion', 'declutter', 'bg-removal']) {

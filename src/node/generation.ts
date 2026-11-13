@@ -3,10 +3,11 @@ import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { SandboxExecutionPolicy } from '@deepseek-ai/dsh-sandbox'
 import sharp from 'sharp'
-import { BLUR_SIGMA_VALUES } from '../shared.ts'
+import { BLUR_SIGMA_VALUES, FREE_MAX_AREA, FREE_MAX_STEPS } from '../shared.ts'
 import type { Settings } from '../shared.ts'
 import type { ApiPayload, Json, NovelAIClient } from './api.ts'
 import { modelInfo, resolveGenerationModel } from './models.ts'
+import { applyChineseAutoText, applyQualityTags, applyUcPreset, resolveQualityPreset, resolveUcPreset } from './presets.ts'
 import { assertWritablePaths } from './storage.ts'
 
 export interface Character { prompt: string; negative_prompt?: string; positions?: { x: number; y: number }[] }
@@ -21,16 +22,30 @@ export interface GenerateArgs {
   mask_path?: string
   characters?: Character[]
   use_coords?: boolean
+  transparent_background?: boolean
   vibes?: Vibe[]
   references?: PreciseReference[]
   parameters?: ApiPayload
 }
 
 export type ReadImage = (path: string) => Promise<Buffer>
+export type GenerationSettings = Pick<Settings, 'model' | 'steps' | 'scale' | 'sampler' | 'cfgRescale' | 'qualityPreset' | 'ucPreset' | 'autoText'>
+
+/** Agent 可调的生成参数；采样器、步数、CFG、预设等由插件设置统一控制。 */
+export const AGENT_PARAMETERS = ['width', 'height', 'seed', 'strength', 'noise', 'extra_noise_seed', 'add_original_image', 'color_correct', 'image_format'] as const
 
 const MAX_DIMENSION = 2048
-const MAX_AUTO_AREA = 2048 * 1536
-const MAX_SAMPLES = 8
+/** V4/V4.5 自定义站位只支持 5×5 网格中心点。 */
+const GRID = [0.1, 0.3, 0.5, 0.7, 0.9]
+
+/** 官网按采样器推导噪声调度；V5 不发送该字段，由服务端决定。 */
+export function noiseScheduleFor(sampler: string): string {
+  switch (sampler) {
+    case 'k_euler': case 'k_euler_ancestral': case 'k_dpmpp_sde': case 'k_dpmpp_2s_ancestral': case 'k_dpmpp_2m_sde': return 'karras'
+    case 'k_dpm_2': case 'k_dpmpp_2m': return 'exponential'
+    default: return 'native'
+  }
+}
 
 export async function normalizeImage(bytes: Buffer): Promise<{ data: Buffer; width: number; height: number }> {
   const meta = await sharp(bytes).metadata()
@@ -42,12 +57,16 @@ export async function normalizeImage(bytes: Buffer): Promise<{ data: Buffer; wid
   return { data: bytes, width: meta.width, height: meta.height }
 }
 
-function fitCanvasSize(width: number, height: number): { width: number; height: number } {
-  const scale = Math.min(1, MAX_DIMENSION / width, MAX_DIMENSION / height, Math.sqrt(MAX_AUTO_AREA / (width * height)))
-  return {
-    width: Math.min(MAX_DIMENSION, Math.max(64, Math.round((width * scale) / 64) * 64)),
-    height: Math.min(MAX_DIMENSION, Math.max(64, Math.round((height * scale) / 64) * 64)),
+/** 源图自动适配到 Opus 免费面积内的 64 倍数画布。 */
+export function fitCanvasSize(width: number, height: number): { width: number; height: number } {
+  const scale = Math.min(1, MAX_DIMENSION / width, MAX_DIMENSION / height, Math.sqrt(FREE_MAX_AREA / (width * height)))
+  let w = Math.min(MAX_DIMENSION, Math.max(64, Math.round((width * scale) / 64) * 64))
+  let h = Math.min(MAX_DIMENSION, Math.max(64, Math.round((height * scale) / 64) * 64))
+  while (w * h > FREE_MAX_AREA) {
+    if (w >= h) w -= 64
+    else h -= 64
   }
+  return { width: w, height: h }
 }
 
 export function validateBlurSigma(value: unknown): number {
@@ -59,7 +78,7 @@ export function validateBlurSigma(value: unknown): number {
 
 export async function generationPayload(
   args: GenerateArgs,
-  settings: Pick<Settings, 'model' | 'steps'>,
+  settings: GenerationSettings,
   read: ReadImage,
   encode: (vibe: Vibe, model: string) => Promise<EncodedVibe>,
 ): Promise<ApiPayload> {
@@ -68,37 +87,43 @@ export async function generationPayload(
   const action = args.action === 'enhance' ? 'img2img' : args.action ?? 'generate'
   const { targetId, model } = resolveGenerationModel(requested, action)
 
-  const p: ApiPayload = {
-    params_version: model.family >= 5 ? 4 : 3,
-    width: 1024, height: 1024, scale: 6,
-    sampler: 'k_euler_ancestral', noise_schedule: 'karras',
-    seed: randomInt(0, 2 ** 32), n_samples: 1, image_format: 'png',
-    negative_prompt: args.negative_prompt ?? '',
-    cfg_rescale: 0, deliberate_euler_ancestral_bug: false, prefer_brownian: true,
-    ...args.parameters,
-    steps: settings.steps,
+  const extra = args.parameters ?? {}
+  const blocked = Object.keys(extra).filter(key => !(AGENT_PARAMETERS as readonly string[]).includes(key))
+  if (blocked.length) {
+    throw new Error(`parameters 仅支持 ${AGENT_PARAMETERS.join('、')}；${blocked.join('、')} 由插件设置统一控制或会超出 Opus 免费范围`)
   }
-  delete p.stream
+  if (!Number.isInteger(settings.steps) || settings.steps < 1 || settings.steps > FREE_MAX_STEPS) {
+    throw new Error(`插件设置中的生成步数必须为 1..${FREE_MAX_STEPS}`)
+  }
+
+  const p: ApiPayload = {
+    params_version: model.family >= 4 ? 4 : 3,
+    width: 832, height: 1216,
+    scale: settings.scale,
+    sampler: settings.sampler,
+    steps: settings.steps,
+    seed: randomInt(0, 2 ** 32), n_samples: 1, image_format: 'png',
+    cfg_rescale: settings.cfgRescale,
+    deliberate_euler_ancestral_bug: false, prefer_brownian: true,
+    ...extra,
+  }
+  // V5 不开放噪声调度选择（官网不发送该字段）；旧模型按采样器推导。
+  if (model.family < 5) p.noise_schedule = noiseScheduleFor(settings.sampler)
 
   if (args.image_path) {
     const normalized = await normalizeImage(await read(args.image_path))
     const fitted = fitCanvasSize(normalized.width, normalized.height)
-    p.width = args.parameters?.width ?? fitted.width
-    p.height = args.parameters?.height ?? fitted.height
+    p.width = extra.width ?? fitted.width
+    p.height = extra.height ?? fitted.height
     for (const name of ['width', 'height'] as const) validateDimension(name, p[name])
     p.image = (await sharp(normalized.data).resize(p.width as number, p.height as number, { fit: 'fill' }).png().toBuffer()).toString('base64')
   }
   for (const name of ['width', 'height'] as const) validateDimension(name, p[name])
-
-  if (typeof p.n_samples !== 'number' || !Number.isInteger(p.n_samples) || p.n_samples < 1 || p.n_samples > MAX_SAMPLES) {
-    throw new Error(`n_samples 必须为 1..${MAX_SAMPLES} 的整数`)
+  const area = (p.width as number) * (p.height as number)
+  if (area > FREE_MAX_AREA) {
+    throw new Error(`画布 ${p.width}×${p.height} 超出 Opus 免费范围（面积 ≤ ${FREE_MAX_AREA.toLocaleString('en-US')} 像素，例如 832×1216、1216×832、1024×1024）`)
   }
   if (typeof p.seed !== 'number' || !Number.isInteger(p.seed) || p.seed < 0 || p.seed >= 2 ** 32) throw new Error('seed 必须位于 0..4294967295')
-  if (typeof p.scale !== 'number' || !Number.isFinite(p.scale) || p.scale <= 0) throw new Error('scale 必须大于 0')
-  if (p.upscale && typeof p.upscale === 'object' && !Array.isArray(p.upscale) && 'declared_blur_sigma' in p.upscale && p.upscale.declared_blur_sigma !== undefined) {
-    validateBlurSigma(p.upscale.declared_blur_sigma)
-  }
-  if (args.negative_prompt !== undefined) p.negative_prompt = args.negative_prompt
 
   if (args.mask_path) {
     const normalizedMask = await normalizeImage(await read(args.mask_path))
@@ -123,37 +148,48 @@ export async function generationPayload(
     p.noise = noise
     p.add_original_image ??= true
     p.color_correct ??= true
-    const rawImg2Img = p.img2img && typeof p.img2img === 'object' && !Array.isArray(p.img2img) ? p.img2img : {}
-    p.img2img = { strength, noise, color_correct: Boolean(p.color_correct), ...rawImg2Img }
+    p.img2img = { strength, noise, color_correct: Boolean(p.color_correct) }
   }
 
-  if (args.characters?.length && (args.parameters?.v4_prompt || args.parameters?.v4_negative_prompt)) {
-    throw new Error('不能同时传入顶层 characters 与原始 parameters.v4_prompt / v4_negative_prompt')
+  // 提示词组装：中文台词自动转 Text: → 官方质量标签 / 透明背景标签 → 官方 UC 预设。
+  const characters = args.characters ?? []
+  if (characters.length && model.family < 4) throw new Error('独立角色提示词需要 V4 或更高模型')
+  if (characters.length > model.characters) throw new Error(`${model.label} 最多支持 ${model.characters} 个角色提示词`)
+  for (const character of characters) for (const pos of character.positions ?? []) {
+    range('角色 x', pos.x); range('角色 y', pos.y)
   }
+  const transparent = Boolean(args.transparent_background)
+  if (transparent && !model.alpha) throw new Error(`${model.label} 不支持透明背景，请使用 V5 模型`)
+  const useCoords = args.use_coords ?? characters.some(character => character.positions?.length)
+
+  let prompt = args.prompt.trim()
+  if (settings.autoText && model.family >= 5) prompt = applyChineseAutoText(prompt, characters, Boolean(useCoords))
+  const quality = resolveQualityPreset(model, settings.qualityPreset)
+  const uc = resolveUcPreset(model, settings.ucPreset)
+  prompt = applyQualityTags(prompt, quality, transparent)
+  const negative = applyUcPreset(args.negative_prompt ?? '', uc)
+  p.negative_prompt = negative
+  p.tag_hint_qt = quality.index
+  p.tag_hint_uc_preset = uc.index
+  if (transparent) p.tag_hint_transparent_background = true
+
   if (model.family >= 4) {
-    if (!p.v4_prompt || !p.v4_negative_prompt) {
-      const characters = args.characters ?? []
-      if (characters.length > model.characters) throw new Error(`${model.label} 最多支持 ${model.characters} 个角色提示词`)
-      const use_coords = args.use_coords ?? characters.some(character => character.positions?.length)
-      for (const character of characters) for (const pos of character.positions ?? []) {
-        range('角色 x', pos.x); range('角色 y', pos.y)
-      }
-      const caption = (negative: boolean) => ({
-        base_caption: negative ? p.negative_prompt : args.prompt,
-        char_captions: characters.map(character => ({
-          char_caption: negative ? character.negative_prompt ?? '' : character.prompt,
-          centers: character.positions?.length ? character.positions : [{ x: 0.5, y: 0.5 }],
-        })),
-      })
-      p.v4_prompt ??= { caption: caption(false), use_coords: Boolean(use_coords), use_order: true } as Json
-      p.v4_negative_prompt ??= { caption: caption(true), legacy_uc: false } as Json
-    }
-  } else if (args.characters?.length) {
-    throw new Error('独立角色提示词需要 V4 或更高模型')
+    const snap = (value: number) => model.family >= 5 ? value : GRID[Math.min(4, Math.max(0, Math.floor(5 * value)))]
+    const centers = (character: Character) => (character.positions?.length ? character.positions : [{ x: 0.5, y: 0.5 }])
+      .map(pos => ({ x: snap(pos.x), y: snap(pos.y) }))
+    p.v4_prompt = {
+      caption: { base_caption: prompt, char_captions: characters.map(character => ({ char_caption: character.prompt, centers: centers(character) })) },
+      use_coords: Boolean(useCoords),
+      use_order: true,
+    } as Json
+    p.v4_negative_prompt = {
+      caption: { base_caption: negative, char_captions: characters.map(character => ({ char_caption: character.negative_prompt ?? '', centers: centers(character) })) },
+      legacy_uc: false,
+    } as Json
   }
 
-  const hasVibes = Boolean(args.vibes?.length || p.reference_image || (p.reference_image_multiple as Json[] | undefined)?.length)
-  const hasReferences = Boolean(args.references?.length || (p.director_reference_images as Json[] | undefined)?.length)
+  const hasVibes = Boolean(args.vibes?.length)
+  const hasReferences = Boolean(args.references?.length)
   if (hasVibes && !model.vibe) throw new Error(`${model.label} 尚不支持 Vibe Transfer，请显式选择 V4.5/V4/V3`)
   if (hasReferences && !model.precise) throw new Error('Precise Reference 当前只支持 V4.5 模型，请显式指定模型')
   if (hasVibes && hasReferences) throw new Error('NovelAI 当前不支持同时使用 Vibe Transfer 与 Precise Reference')
@@ -177,13 +213,7 @@ export async function generationPayload(
     p.director_reference_strength_values = args.references.map(reference => range('reference strength', reference.strength ?? 1))
     p.director_reference_secondary_strength_values = args.references.map(reference => 1 - range('fidelity', reference.fidelity ?? 1))
   }
-  if (model.family >= 5) {
-    if (p.sm || p.sm_dyn || p.dynamic_thresholding || p.skip_cfg_above_sigma || p.controlnet_model) {
-      throw new Error('V5 不支持 SMEA、Decrisper、Variety+ 或 ControlNet；请使用支持这些选项的模型')
-    }
-    if (p.noise_schedule !== 'karras') throw new Error('V5 的 noise_schedule 需要使用 karras')
-  }
-  return { input: args.prompt, model: targetId, action, parameters: p }
+  return { input: prompt, model: targetId, action, parameters: p }
 }
 
 export async function prepareReference(data: Buffer): Promise<Buffer> {

@@ -6,12 +6,13 @@ import type {} from '@deepseek-ai/dsh-fs'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import type {} from '@deepseek-ai/dsh-working-directory'
 import sharp from 'sharp'
-import { API_DEFINITIONS, array, bool, generationParameters, integer, number, object, text } from './schema.ts'
-import { encodeVibe, generationPayload, normalizeImage, parseVibe, validateBlurSigma } from './generation.ts'
+import { API_DEFINITIONS, agentGenerationParameters, array, bool, integer, number, object, text } from './schema.ts'
+import { AGENT_PARAMETERS, encodeVibe, generationPayload, normalizeImage, parseVibe, validateBlurSigma } from './generation.ts'
 import type { EncodedVibe, GenerateArgs, Vibe } from './generation.ts'
 import type { ApiPayload, Json, NovelAIClient } from './api.ts'
 import { MODELS, modelInfo } from './models.ts'
 import { assertWritablePaths, safeMetadata, saveImages } from './storage.ts'
+import { DEFAULT_SETTINGS, FREE_MAX_AREA, FREE_MAX_STEPS } from '../shared.ts'
 import type { ImageResult, Settings } from '../shared.ts'
 
 function fileLocations(paths: readonly (string | undefined)[]): { path: string }[] | undefined {
@@ -34,7 +35,8 @@ export interface ToolAccountHooks {
   onAccountData?: (raw: unknown) => void
 }
 
-export function registerTools(ctx: Context, client: NovelAIClient, settings: () => Settings, hooks?: ToolAccountHooks): void {
+export function registerTools(ctx: Context, client: NovelAIClient, rawSettings: () => Partial<Settings>, hooks?: ToolAccountHooks): void {
+  const settings = (): Settings => ({ ...DEFAULT_SETTINGS, ...rawSettings() })
   const jsonOutput = {
     schema: { type: 'json' as const },
     render: (_args: unknown, value: unknown) => [{ type: 'text' as const, text: JSON.stringify(value) }],
@@ -135,19 +137,20 @@ export function registerTools(ctx: Context, client: NovelAIClient, settings: () 
 
   register<GenerateArgs>({
     name: 'novelai_generate',
-    description: 'Generate or edit images with NovelAI. Load skill novelai-v5-prompt first. Supports text-to-image, img2img, infill, Enhance, multi-character positions, Vibe Transfer, Precise Reference, transparent PNG/WebP and the complete official generation parameters. Returns saved paths, seeds, metadata and Markdown to insert into the response. Use model-specific capabilities; never silently switch models. A submitted paid request is not automatically retried.',
+    description: 'Generate or edit images with NovelAI. Load skill novelai-v5-prompt first. Supports text-to-image, img2img, infill, Enhance, multi-character positions, transparent background, Vibe Transfer and Precise Reference. Sampler, steps, prompt guidance, official quality tags and Undesired Content presets are applied automatically from the plugin settings; Chinese quoted dialogue is auto-rendered as in-image text on V5. Choose the canvas yourself within the Opus free range (width × height ≤ 1,048,576, single image). Returns saved paths, seeds, metadata and Markdown to insert into the response. Never silently switch models. A submitted request is not automatically retried.',
     parameters: {
-      prompt: { ...text('Base prompt; use NovelAI tags, natural language, weighting, and Text: for lettering.'), required: true },
-      negative_prompt: text('Undesired Content base prompt.'),
-      model: text('Model ID from novelai_capabilities; defaults to configured V5 Full.'),
+      prompt: { ...text('Base prompt: NovelAI tags plus natural language. Do not add quality/aesthetic preset tags or "no text"; the plugin appends the official quality tags. Put any explicit Text: section at the very end.'), required: true },
+      negative_prompt: text('Extra Undesired Content for this image only; appended after the official UC preset.'),
+      model: text('Model ID from novelai_capabilities; defaults to the configured model (V5 Full).'),
       action: { type: 'string', enum: ['generate', 'img2img', 'infill', 'enhance'], description: 'Enhance is a prompt-guided img2img pass. infill selects the matching inpainting model.' },
-      image_path: text('Local source image for img2img, Enhance or infill.'),
+      image_path: text('Local source image for img2img, Enhance or infill (auto-fitted into the free canvas range).'),
       mask_path: text('Infill mask image: white regenerates, black preserves. Match the source canvas.'),
-      characters: array(object({ prompt: { ...text('Per-character prompt without a subject count.'), required: true }, negative_prompt: text('Per-character Undesired Content.'), positions: array(object({ x: { ...number('0..1'), required: true }, y: { ...number('0..1'), required: true } })) })),
-      use_coords: bool('Use explicit character positions; otherwise layout is automatic.'),
+      characters: array(object({ prompt: { ...text('Per-character prompt starting with girl/boy/other, without a subject count.'), required: true }, negative_prompt: text('Per-character Undesired Content.'), positions: array(object({ x: { ...number('0..1 left→right'), required: true }, y: { ...number('0..1 top→bottom'), required: true } })) })),
+      use_coords: bool('Use explicit character positions; otherwise the AI places characters in prompt order.'),
+      transparent_background: bool('V5 only: transparent PNG background (adds the official transparent background tag and hint).'),
       vibes: array(object({ image_path: text('Original image; V4+ caches the paid encoding for reuse.'), encoding_path: text('Previously returned .nai-vibe.json; avoids another encoding charge.'), strength: number('0..1, default 0.6'), information_extracted: number('0..1, default 1 for new encodings; cached encoding keeps its own value.') })),
       references: array(object({ image_path: { ...text('Reference image, automatically resized and black-padded to the accepted canvas.'), required: true }, type: { type: 'string', enum: ['character', 'style', 'character&style'] }, fidelity: number('0..1, default 1'), strength: number('0..1, default 1'), information_extracted: number('0..1, default 1') })),
-      parameters: { ...generationParameters, description: 'Generation parameter object. width/height, scale, sampler, seed, n_samples, strength/noise, quality, SMEA, Variety+, ControlNet, alpha and upscaling. Top-level image paths and characters are encoded by the plugin. Raw image fields, if used, require base64.' },
+      parameters: { ...agentGenerationParameters(AGENT_PARAMETERS), description: `Optional per-image parameters: canvas size (width × height ≤ ${FREE_MAX_AREA}), seed and img2img/infill strength/noise. Sampler, steps, scale, presets and sample count are controlled by plugin settings.` },
     },
     output: imageOutput,
     presentCall: args => {
@@ -322,10 +325,19 @@ export function registerTools(ctx: Context, client: NovelAIClient, settings: () 
     parameters: { include_parameters: bool('Include full official schemas for generation, Director Tools, upscaling and vibe encoding.') },
     concurrencySafe: true,
     presentCall: () => ({ card: 'generic', kind: 'read', title: 'NovelAI 模型能力查询' }),
-    execute: async args => ({
-      models: MODELS, configured_model: settings().model,
-      operations: ['generate', 'img2img', 'infill', 'enhance', 'multi-character', 'vibe-transfer', 'precise-reference', 'bg-removal', 'lineart', 'sketch', 'colorize', 'emotion', 'declutter', 'upscale', 'encode-vibe', 'suggest-tags', 'account'],
-      ...(args.include_parameters ? { parameters: API_DEFINITIONS } : {}),
-    }),
+    execute: async args => {
+      const current = settings()
+      return {
+        models: MODELS, configured_model: current.model,
+        generation_settings: {
+          steps: current.steps, scale: current.scale, sampler: current.sampler, cfg_rescale: current.cfgRescale,
+          quality_preset: current.qualityPreset, uc_preset: current.ucPreset, chinese_auto_text: current.autoText,
+          note: 'Controlled in the plugin settings page; novelai_generate applies them automatically.',
+        },
+        free_range: { max_area: FREE_MAX_AREA, max_steps: FREE_MAX_STEPS, n_samples: 1, recommended_canvases: ['832x1216', '1216x832', '1024x1024'] },
+        operations: ['generate', 'img2img', 'infill', 'enhance', 'multi-character', 'transparent-background', 'vibe-transfer', 'precise-reference', 'bg-removal', 'lineart', 'sketch', 'colorize', 'emotion', 'declutter', 'upscale', 'encode-vibe', 'suggest-tags', 'account'],
+        ...(args.include_parameters ? { parameters: API_DEFINITIONS } : {}),
+      }
+    },
   })
 }

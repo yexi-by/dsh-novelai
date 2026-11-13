@@ -4,7 +4,7 @@ import type {} from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-credentials'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import z from '@deepseek-ai/schemastery'
-import { CREDENTIAL_REF, DEFAULT_SETTINGS, RPC_CHANNEL } from '../shared.ts'
+import { CREDENTIAL_REF, DEFAULT_SETTINGS, FREE_MAX_STEPS, QUALITY_PRESETS, RPC_CHANNEL, SAMPLERS, UC_PRESETS } from '../shared.ts'
 import type { Settings } from '../shared.ts'
 import { createAccountTracker } from './account.ts'
 import { NovelAIClient } from './api.ts'
@@ -15,7 +15,13 @@ export const name = 'novelai'
 export const inject = ['tools', 'skills', 'credentials', 'fs', 'workingDirectory', 'settings']
 export const Config = z.object({
   model: z.string().min(1).default(DEFAULT_SETTINGS.model),
-  steps: z.number().min(1).max(50).step(1).default(DEFAULT_SETTINGS.steps),
+  steps: z.number().min(1).max(FREE_MAX_STEPS).step(1).default(DEFAULT_SETTINGS.steps),
+  scale: z.number().min(0).max(10).step(0.1).default(DEFAULT_SETTINGS.scale),
+  sampler: z.union(SAMPLERS.map(sampler => sampler.id)).default(DEFAULT_SETTINGS.sampler),
+  cfgRescale: z.number().min(0).max(1).step(0.02).default(DEFAULT_SETTINGS.cfgRescale),
+  qualityPreset: z.union([...QUALITY_PRESETS]).default(DEFAULT_SETTINGS.qualityPreset),
+  ucPreset: z.union([...UC_PRESETS]).default(DEFAULT_SETTINGS.ucPreset),
+  autoText: z.boolean().default(DEFAULT_SETTINGS.autoText),
   outputDirectory: z.string().min(1).default(DEFAULT_SETTINGS.outputDirectory),
   timeoutSeconds: z.number().min(1).default(DEFAULT_SETTINGS.timeoutSeconds),
 }).volatile()

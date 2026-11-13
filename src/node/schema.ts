@@ -38,6 +38,28 @@ export const generationParameters = apiSchema('image.RequestParameters') as Valu
 delete generationParameters.properties.stream
 export const API_DEFINITIONS = definitions
 
+const AGENT_PARAMETER_HINTS: Record<string, string> = {
+  width: 'Canvas width, multiple of 64. width × height must stay ≤ 1,048,576 (Opus free range). Default 832.',
+  height: 'Canvas height, multiple of 64. width × height must stay ≤ 1,048,576 (Opus free range). Default 1216.',
+  seed: 'Reuse a returned seed to iterate on the same composition.',
+  strength: 'img2img / Enhance / infill strength 0..1.',
+  noise: 'img2img / Enhance / infill noise 0..1.',
+  extra_noise_seed: 'Optional img2img noise seed.',
+  add_original_image: 'Infill: overlay untouched original pixels outside the mask (default true).',
+  color_correct: 'Infill color correction (default true).',
+  image_format: 'Output format.',
+}
+
+/** Agent 可见的精简生成参数；采样器、步数、CFG 与预设由插件设置页统一控制。 */
+export function agentGenerationParameters(keys: readonly string[]): ValueSchemaSpec & { properties: ParameterSchemaSpec } {
+  const properties = Object.fromEntries(keys.map(key => {
+    const base = generationParameters.properties[key]
+    if (!base) throw new Error(`官方 schema 缺少参数 ${key}`)
+    return [key, { ...base, description: AGENT_PARAMETER_HINTS[key] ?? (base as { description?: string }).description }]
+  })) as ParameterSchemaSpec
+  return { type: 'object', additionalProperties: false, properties }
+}
+
 export const text = (description: string) => ({ type: 'string' as const, description })
 export const number = (description: string) => ({ type: 'number' as const, description })
 export const integer = (description: string) => ({ type: 'integer' as const, description })

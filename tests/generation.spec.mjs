@@ -6,9 +6,10 @@ import { join } from 'node:path'
 import sharp from 'sharp'
 import { zipSync } from 'fflate'
 import { harness } from '../scripts/dsh-runtime.mjs'
-import { generationPayload, prepareReference, parseVibe } from '../src/node/generation.ts'
+import { fitCanvasSize, generationPayload, prepareReference, parseVibe } from '../src/node/generation.ts'
+import { applyChineseAutoText, extractQuotes } from '../src/node/presets.ts'
 import { modelInfo } from '../src/node/models.ts'
-import { DEFAULT_SETTINGS } from '../src/shared.ts'
+import { DEFAULT_SETTINGS, normalizeSettings } from '../src/shared.ts'
 import { formatImageMarkdown, saveImages } from '../src/node/storage.ts'
 import { decodeImages } from '../src/node/api.ts'
 
@@ -18,29 +19,103 @@ const png = await sharp({ create: { width: 64, height: 128, channels: 4, backgro
 const read = async () => png
 const encode = async () => { throw new Error('unexpected paid encoding') }
 
-test('多角色基础与负向 caption 一一对应，坐标和全部高级参数传给真实请求结构', async () => {
-  const body = await generationPayload({ prompt: '2girls, park', negative_prompt: 'lowres', characters: [
-    { prompt: 'girl, black hair', negative_prompt: 'hat', positions: [{ x: 0.2, y: 0.7 }] }, { prompt: 'girl, blonde hair' },
-  ], parameters: { width: 1216, height: 832, steps: 32, seed: 21, n_samples: 2, straight_alpha: true, tag_hint_qt: 0, upscale: { declared_blur_sigma: 0.35 } } }, DEFAULT_SETTINGS, read, encode)
+test('多角色 caption、官方默认参数、质量标签与 UC 预设按官网规则组装', async () => {
+  const body = await generationPayload({ prompt: '2girls, park', negative_prompt: 'hat', characters: [
+    { prompt: 'girl, black hair', negative_prompt: 'glasses', positions: [{ x: 0.2, y: 0.7 }] }, { prompt: 'girl, blonde hair' },
+  ], parameters: { width: 1216, height: 832, seed: 21 } }, DEFAULT_SETTINGS, read, encode)
+  const p = body.parameters
   assert.equal(body.model, 'nai-diffusion-5-full')
-  assert.equal(body.parameters.v4_prompt.caption.char_captions[0].char_caption, 'girl, black hair')
-  assert.equal(body.parameters.v4_negative_prompt.caption.char_captions[0].char_caption, 'hat')
-  assert.deepEqual(body.parameters.v4_prompt.caption.char_captions[0].centers, [{ x: 0.2, y: 0.7 }])
-  assert.equal(body.parameters.v4_prompt.use_coords, true)
-  assert.equal(body.parameters.n_samples, 2)
-  assert.equal(body.parameters.steps, 28)
-  assert.equal(body.parameters.straight_alpha, true)
-  assert.equal(body.parameters.upscale.declared_blur_sigma, 0.35)
+  assert.equal(p.params_version, 4)
+  assert.equal(p.steps, 23)
+  assert.equal(p.scale, 7)
+  assert.equal(p.sampler, 'k_euler_ancestral')
+  assert.equal(p.cfg_rescale, 0)
+  assert.equal(p.n_samples, 1)
+  assert.equal('noise_schedule' in p, false)
+  assert.equal(body.input, '2girls, park, very aesthetic, masterpiece, no text')
+  assert.equal(p.v4_prompt.caption.base_caption, body.input)
+  assert.match(p.negative_prompt, /^lowres, artistic error, film grain.*blank page, hat$/)
+  assert.equal(p.v4_negative_prompt.caption.base_caption, p.negative_prompt)
+  assert.equal(p.tag_hint_qt, 1)
+  assert.equal(p.tag_hint_uc_preset, 2)
+  assert.equal(p.v4_prompt.caption.char_captions[0].char_caption, 'girl, black hair')
+  assert.equal(p.v4_negative_prompt.caption.char_captions[0].char_caption, 'glasses')
+  assert.deepEqual(p.v4_prompt.caption.char_captions[0].centers, [{ x: 0.2, y: 0.7 }])
+  assert.equal(p.v4_prompt.use_coords, true)
+  assert.equal(p.v4_prompt.use_order, true)
+
+  const defaults = await generationPayload({ prompt: '1girl' }, DEFAULT_SETTINGS, read, encode)
+  assert.deepEqual([defaults.parameters.width, defaults.parameters.height], [832, 1216])
 })
 
-test('不支持的模型组合或非法参数在编码或扣费请求前报错', async () => {
+test('插件设置控制采样器与预设：Light / Human Focus / 关闭预设 / 旧模型噪声调度与网格吸附', async () => {
+  const light = await generationPayload({ prompt: '1girl, solo' }, { ...DEFAULT_SETTINGS, qualityPreset: 'light', ucPreset: 'humanFocus', sampler: 'k_dpmpp_2m', scale: 5.5 }, read, encode)
+  assert.equal(light.input, '1girl, solo, very aesthetic, amazing quality, no text')
+  assert.match(light.parameters.negative_prompt, /blank page, @_@, mismatched pupils, glowing eyes, bad anatomy$/)
+  assert.equal(light.parameters.tag_hint_qt, 3)
+  assert.equal(light.parameters.tag_hint_uc_preset, 4)
+  assert.equal(light.parameters.sampler, 'k_dpmpp_2m')
+  assert.equal(light.parameters.scale, 5.5)
+  assert.equal('noise_schedule' in light.parameters, false)
+
+  const none = await generationPayload({ prompt: '1girl', negative_prompt: 'hat' }, { ...DEFAULT_SETTINGS, qualityPreset: 'none', ucPreset: 'none' }, read, encode)
+  assert.equal(none.input, '1girl')
+  assert.equal(none.parameters.negative_prompt, 'hat')
+  assert.deepEqual([none.parameters.tag_hint_qt, none.parameters.tag_hint_uc_preset], [0, 0])
+
+  // V4 Full 无 Light 质量 / Human Focus UC：按官网回退到 Standard / Heavy；DPM++ 2M 推导 exponential；坐标吸附 5×5 网格
+  const v4 = await generationPayload({ prompt: '2girls', model: 'nai-diffusion-4-full', characters: [{ prompt: 'girl', positions: [{ x: 0.05, y: 0.62 }] }] },
+    { ...DEFAULT_SETTINGS, qualityPreset: 'light', ucPreset: 'humanFocus', sampler: 'k_dpmpp_2m' }, read, encode)
+  assert.equal(v4.input, '2girls, no text, best quality, very aesthetic, absurdres')
+  assert.match(v4.parameters.negative_prompt, /^blurry, lowres, error, film grain/)
+  assert.equal(v4.parameters.noise_schedule, 'exponential')
+  assert.deepEqual(v4.parameters.v4_prompt.caption.char_captions[0].centers, [{ x: 0.1, y: 0.7 }])
+})
+
+test('中文引号台词自动转 Text:，按官网阅读顺序排列，质量标签插在 Text: 之前且移除 no text', async () => {
+  const body = await generationPayload({
+    prompt: '2girls, cafe, speech bubble, the two girls greet each other',
+    use_coords: true,
+    characters: [
+      { prompt: 'girl, blonde hair, replying “今天也要加油”', positions: [{ x: 0.7, y: 0.5 }] },
+      { prompt: 'girl, black hair, saying “早上好！”', positions: [{ x: 0.3, y: 0.5 }] },
+    ],
+  }, DEFAULT_SETTINGS, read, encode)
+  assert.equal(body.input, '2girls, cafe, speech bubble, the two girls greet each other, very aesthetic, masterpiece, Text: 早上好！\n\n今天也要加油')
+
+  const english = await generationPayload({ prompt: '1girl, holding a sign that says "OPEN"' }, DEFAULT_SETTINGS, read, encode)
+  assert.equal(english.input, '1girl, holding a sign that says "OPEN", very aesthetic, masterpiece, no text')
+
+  const manual = await generationPayload({ prompt: '1girl, sign, “不会被重复提取”\nText: 手写文字' }, DEFAULT_SETTINGS, read, encode)
+  assert.equal(manual.input, '1girl, sign, “不会被重复提取”, very aesthetic, masterpiece, Text: 手写文字')
+
+  const disabled = await generationPayload({ prompt: '1girl, says “你好”' }, { ...DEFAULT_SETTINGS, autoText: false }, read, encode)
+  assert.equal(disabled.input, '1girl, says “你好”, very aesthetic, masterpiece, no text')
+
+  const transparent = await generationPayload({ prompt: '1girl, full body', transparent_background: true }, DEFAULT_SETTINGS, read, encode)
+  assert.equal(transparent.input, '1girl, full body, transparent background, very aesthetic, masterpiece, no text')
+  assert.equal(transparent.parameters.tag_hint_transparent_background, true)
+  await assert.rejects(generationPayload({ prompt: 'x', model: 'nai-diffusion-4-5-full', transparent_background: true }, DEFAULT_SETTINGS, read, encode), /不支持透明背景/)
+})
+
+test('引号提取兼容中英文引号与撇号，同一提示词多段中文台词按官网规则逆序', () => {
+  assert.deepEqual(extractQuotes(`她说“你好”，又说「再见」，英文 'It's fine' 不截断撇号`), ['你好', '再见', "It's fine"])
+  assert.equal(applyChineseAutoText('1girl, “第一句”, “第二句”', [], false), '1girl, “第一句”, “第二句”, Text: 第二句\n\n第一句')
+})
+
+test('不支持的模型组合、超出免费范围或由设置控制的参数在编码或扣费请求前报错', async () => {
   await assert.rejects(generationPayload({ prompt: 'landscape', vibes: [{ image_path: 'style.png' }] }, DEFAULT_SETTINGS, read, encode), /不支持 Vibe/)
   await assert.rejects(generationPayload({ prompt: 'portrait', references: [{ image_path: 'ref.png' }] }, DEFAULT_SETTINGS, read, encode), /只支持 V4.5/)
   await assert.rejects(generationPayload({ prompt: 'portrait', model: 'nai-diffusion-4-5-full', references: [{ image_path: 'r' }], vibes: [{ image_path: 'v' }] }, DEFAULT_SETTINGS, read, encode), /同时使用/)
   await assert.rejects(generationPayload({ prompt: 'portrait', parameters: { width: 1000 } }, DEFAULT_SETTINGS, read, encode), /64 倍数/)
   await assert.rejects(generationPayload({ prompt: 'portrait', parameters: { width: 4096 } }, DEFAULT_SETTINGS, read, encode), /64\.\.2048/)
-  await assert.rejects(generationPayload({ prompt: 'portrait', parameters: { upscale: { declared_blur_sigma: 0.25 } } }, DEFAULT_SETTINGS, read, encode), /declared_blur_sigma/)
-  await assert.rejects(generationPayload({ prompt: '2girls', characters: [{ prompt: 'girl' }], parameters: { v4_prompt: { caption: { base_caption: 'x', char_captions: [] } } } }, DEFAULT_SETTINGS, read, encode), /不能同时传入/)
+  await assert.rejects(generationPayload({ prompt: 'portrait', parameters: { width: 1216, height: 1216 } }, DEFAULT_SETTINGS, read, encode), /免费范围/)
+  await assert.rejects(generationPayload({ prompt: 'portrait', parameters: { sampler: 'k_euler', n_samples: 2 } }, DEFAULT_SETTINGS, read, encode), /由插件设置统一控制/)
+  await assert.rejects(generationPayload({ prompt: 'portrait' }, { ...DEFAULT_SETTINGS, steps: 32 }, read, encode), /1\.\.28/)
+  assert.throws(() => normalizeSettings({ steps: 29 }), /消耗 Anlas/)
+  assert.deepEqual(fitCanvasSize(3000, 2000), { width: 1216, height: 832 })
+  const square = fitCanvasSize(1500, 1500)
+  assert.ok(square.width * square.height <= 1024 * 1024)
 })
 
 test('局部重绘补齐 strength、img2img、add_original_image，正确处理透明 RGBA 蒙版与 V4.5 inpainting 规格', async () => {
@@ -63,8 +138,9 @@ test('局部重绘补齐 strength、img2img、add_original_image，正确处理�
 
   assert.equal(body.model, 'nai-diffusion-4-5-curated-inpainting')
   assert.equal(body.action, 'infill')
-  // V5 Curated 的 infill 实际由 V4.5 Curated inpainting 执行，params_version 应为 3
-  assert.equal(body.parameters.params_version, 3)
+  // V5 Curated 的 infill 实际由 V4.5 Curated inpainting 执行，与官网一致使用 params_version 4，并采用 V4.5 Curated 预设
+  assert.equal(body.parameters.params_version, 4)
+  assert.equal(body.input, 'flower, very aesthetic, masterpiece, no text, -0.8::feet::, rating:general')
   assert.equal(body.parameters.strength, 1)
   assert.equal(body.parameters.noise, 0)
   assert.equal(body.parameters.add_original_image, true)

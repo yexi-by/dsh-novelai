@@ -1,69 +1,113 @@
 ---
 name: novelai-v5-prompt
-description: 使用 NovelAI 生成或编辑图片：编写 V5/V4.5 标签与自然语言提示词、多角色坐标与文字漫画提示词，调用 novelai_* 工具执行文生图、图生图、局部重绘、Vibe、Precise Reference、Director Tools 与 2 倍放大，并将生成图片嵌入回复正文。
+description: 使用 NovelAI 生成或编辑图片：按官方指南编写 V5 标签与自然语言提示词、角色一致性外观、多角色站位与中文台词文字渲染，调用 novelai_* 工具执行文生图、图生图、局部重绘、Enhance、透明背景、Vibe、Precise Reference、Director Tools 与 2 倍放大，并将生成图片嵌入回复正文。
 ---
 
 # NovelAI 绘图与编辑
 
-将用户的视觉需求转化为高质量 NovelAI 提示词，通过已安装的 `novelai_*` 工具生成或编辑真实图片，并将返回的 Markdown 图片嵌入回复正文。
+将用户或剧情中的视觉需求转化为符合 NovelAI 官方指南的提示词，通过 `novelai_*` 工具生成真实图片，并把返回的 Markdown 图片嵌入回复正文。
 
-无特殊要求时优先使用合理默认参数；需要特定构图比例时从标准画布尺寸中选择。
+## 插件已自动处理（不要重复书写）
 
-## 选择工具与模型
+- **采样器、步数、Prompt Guidance、Rescale** 由插件设置页统一控制（默认与官网一致：Euler Ancestral、23 步、CFG 7），工具不接受这些参数。
+- **官方质量标签**（V5 Standard：`very aesthetic, masterpiece, no text`）会自动追加到基础提示词末尾、`Text:` 段之前；画面含文字时会自动去掉 `no text`。**不要**在 `prompt` 中再写 `masterpiece`、`best quality`、`very aesthetic`、`no text` 等预设词。
+- **官方 Undesired Content 预设**（默认 Heavy）会自动作为负向前缀。`negative_prompt` 只写这张图特有的排除项（例如不想出现的配饰、多余人物），不要粘贴通用的低质量词表。
+- **中文台词自动转画面文字**（V5）：提示词或角色提示词中用 `“…”`、`「…」` 包裹的中文内容，会按官网规则自动追加为 `Text:` 段。
+- 每次请求固定生成 1 张，且必须在 Opus 免费范围内（面积 ≤ 1,048,576 像素、步数 ≤ 28）。
 
-- `novelai_generate`：文生图、`img2img` 图生图、`infill` 局部重绘、`enhance` 提示词引导细节增强；支持多角色与坐标、Vibe Transfer、Precise Reference、透明背景及完整官方生成参数。
-- `novelai_augment`：Director Tools（`bg-removal` 背景移除、`lineart` 线稿、`sketch` 草图、`colorize` 上色、`emotion` 表情修改、`declutter` 清理文字/杂物）。
-- `novelai_upscale`：独立 **2 倍放大**（宽高各 ×2，忠实保留原画，不走扩散重绘；需按提示词重绘细节时用 `novelai_generate` 的 `action: "enhance"`）。
-- `novelai_encode_vibe`：编码并本地缓存 V4/V4.5 Vibe；后续复用返回的 `encoding_path` 免除重复编码开销。
-- `novelai_suggest_tags`：查询官方标签建议与识别度（不确定作品名、角色名或服饰标签拼写时先查）。
-- `novelai_account`：查询订阅状态与可用 Anlas 余额。
-- `novelai_capabilities`：查询各模型能力矩阵；传入 `include_parameters: true` 获取完整官方 OpenAPI 参数定义。
+## 工具
 
-默认模型由插件设置决定（默认 `nai-diffusion-5-full`）：
-- **V5 Full / Curated**：适合标签与自然语言混排、多角色（最多 22 人）、画面内文字与漫画分镜、透明 PNG/WebP；**尚不支持** Vibe Transfer、Precise Reference、SMEA、Decrisper、Variety+ 与 ControlNet。
-- **V4.5 Full / Curated**：支持 Precise Reference（角色/画风锁定）与 Vibe Transfer，最多 6 个角色提示词。
-- **V4 Full / Curated**：支持 Vibe Transfer 与最多 6 个角色提示词。
-- **V3 Anime / Furry**：支持原图 Vibe Transfer、SMEA / SMEA DYN 等旧版采样选项，不支持独立角色提示词框。
+- `novelai_generate`：文生图、`img2img`、`infill` 局部重绘、`enhance` 提示词引导精修、多角色与坐标、`transparent_background` 透明背景。
+- `novelai_augment`：Director Tools（`bg-removal`、`lineart`、`sketch`、`colorize`、`emotion`、`declutter`）。
+- `novelai_upscale`：2 倍放大（宽高各 ×2，不做扩散重绘）。
+- `novelai_encode_vibe`：编码并缓存 V4/V4.5 Vibe。
+- `novelai_suggest_tags`：查询官方标签与模型认知度（不确定角色名、作品名、服饰标签拼写时先查）。
+- `novelai_account`：查询订阅、V5 血条与 Anlas。
+- `novelai_capabilities`：查询模型能力、当前生成设置与免费范围。
 
-Vibe Transfer 与 Precise Reference 当前互斥。V5 Curated 的 `infill` 沿用官方当前对应的 `nai-diffusion-4-5-curated-inpainting`（V4.5 规格，最多 6 角色），工具返回 `model` 会标明实际执行模型。需要切换模型才能满足用户需求时明确告知原因，绝不静默忽略受限参数。
+> [!IMPORTANT]
+> Precise Reference（每张额外约 5 Anlas）、Vibe 编码（每次 2 Anlas，超过 4 个 Vibe 时每个再加 2 Anlas）、Director Tools 和 2 倍放大都可能消耗 Anlas。只有在用户明确要求时才使用，不要为了"效果更好"而主动调用。
 
-## 标准画布尺寸
+## 模型
 
-宽高必须为 64..2048 之间的 64 倍数。NovelAI 标准单图档位（≤ 1,048,576 像素）常用尺寸：
-- **竖图（人像/立绘）**：`832 × 1216`
-- **横图（风景/双人场景）**：`1216 × 832`
-- **方图（头像/构图居中）**：`1024 × 1024`
-- **低消耗快速草稿/验证**：`512 × 512`、`512 × 768`、`768 × 512`
+默认模型为 **V5 Full**（`nai-diffusion-5-full`）：数据集最全；理解自然语言与多语言提示词；最多 22 个角色、自由站位；可渲染英文、日文、中文文字（最多 750 字符）；支持透明背景；基础提示词上限约 1471 token。V5 **不支持** Vibe Transfer 与 Precise Reference；只有在用户需要参考图锁定角色或画风时，才显式切换到 `nai-diffusion-4-5-full`，并说明原因。V5 Curated 的局部重绘由 V4.5 Curated inpainting 执行。
 
-## 提示词组织
+## 画布（由你选择，必须在免费范围内）
 
-先明确主体数量、外貌服饰、动作互动、场景构图、镜头光影与媒介画风。精确属性（发色、瞳色、服装、镜头角度）优先使用标准英文标签；复杂空间关系、因果互动、漫画分镜与台词描述结合自然语言（支持英文、日文等）。
+| 场景 | 尺寸 |
+| --- | --- |
+| 人物立绘、单人、半身或全身（默认） | `832×1216` |
+| 双人或多人同框、场景 CG、风景 | `1216×832` |
+| 头像、对称构图 | `1024×1024` |
+| 更修长的竖图或宽银幕横图 | `768×1344` / `1344×768` |
 
-基础提示词按「数据集前缀（需要时置顶 `fur dataset` 或 `background dataset`）→ 主体数量与核心主体 → 动作与场景 → 镜头构图与光影 → 媒介风格 → 复杂度与质量美学词」组织。V5 常规精细画面推荐加入 `high complexity, very aesthetic, best quality`。
+宽高必须是 64 的倍数，且宽 × 高 ≤ 1,048,576。画布比例本身会影响构图：竖图更容易出全身和高个角色，横图更适合多人并排。
 
-权重语法：`{tag}` 每层增强 ×1.05，`[tag]` 每层减弱 ÷1.05；V4+ 支持显式数值权重 `1.3::rain, wet street::`；V4.5+/V5 支持负向局部权重 `-1::hat::`。完整标签语法、多角色互动与排版细节见 [references/prompt-syntax.md](references/prompt-syntax.md)。
+## 提示词组织（官方推荐顺序）
 
-`negative_prompt` 仅按画面需要排除低质与伪影（如 `lowres, artistic error, scan artifacts, worst quality, jpeg artifacts, very displeasing`）或特定多余元素（如 `bad hands, extra digits`）。**未经用户明确要求，不要默认加入 `nsfw`、`rating:sensitive` 等内容分级词**；画面需要文字时不要在负向中放入 `text`。
+```text
+[数据集标签] , 人数 , 角色名 , 作品名 , 外貌 , 服装 , 表情动作 , 取景与视角 , 场景/时间/光线 , 媒介画风 , 复杂度
+```
 
-多角色时：总人数写在基础 `prompt`（如 `2girls`），每个角色拆入 `characters` 数组，单角色提示词以 `girl`、`boy`、`other` 开头且不带数量词。坐标 `positions` 取值 `0..1`，搭配 `use_coords: true` 控制站位；双人动作可用 `source#hug`、`target#hug`、`mutual#hug` 等标签。不要混用 `characters` 与旧版 `|` 分隔语法。
+1. **数据集标签**（按需放在最开头）：`fur dataset`（兽人/Furry）、`background dataset`（无人物的写实风景、静物）。
+2. **人数**：`1girl` / `1boy` / `1other` / `2girls` / `multiple girls`；单人加 `solo` 可减少背景杂人。
+3. **角色与作品**：官方顺序为 `1girl, 角色名 (作品名), 作品名, 其他标签`；先用 `novelai_suggest_tags` 确认拼写。
+4. **外貌**：发长（`short hair` … `very long hair`）+ 发型（`bob cut`、`twintails`、`swept bangs`、`ahoge`）+ 发色、瞳色、肤色、体型。
+5. **服装逐部位写全并带颜色**（如 `blue witch hat, blue cape, white shirt, long sleeves, corset, leather belt, blue frilled skirt, black pantyhose, brown gloves, knee boots`）。官方教程证明：服装写得越完整，跨图一致性越好。
+6. **表情、动作、姿势**；复杂互动、视线方向、因果关系用一两句**英文自然语言**补充。
+7. **取景**（从近到远）：`close-up`、`portrait`、`upper body`、`cowboy shot`、`full body`、`wide shot`、`very wide shot`；**视角**：`from above`、`from below`、`from side`、`from behind`、`dutch angle`。
+8. **场景**：地点、时间、天气、光线；需要有背景但不指定室内外时用 `location`。
+9. **画风与媒介**：画师名、`watercolor`、`visual novel cg` 等。
+10. **复杂度**（V5 专属）：`high complexity` 适合常规精美插画；`low complexity` 或 `ultra complexity` 适合风格化画面；`medium complexity` 介于两者之间。
 
-画面文字排版：在基础提示词写明语言标签（如 `text, english text`）、说话者或文字位置，并在 `prompt` 末尾放置 `Text: 具体文字`；多段文字之间用空行分隔。短词不出现时可将 `parameters.tag_hint_qt` 设为 `0`。不要向用户保证复杂长句拼写一次完全无误。
+V5 常用的专属标签：`visual novel sprite`（立绘）、`visual novel cg`（事件 CG）、`visual novel bg`（背景）、`visual novel chibi`、`visual novel art`、`depthness`（阴影更有层次）、`attractive male`、`meta:novel era` / `meta:golden era`（更复古或更现代）、`year 2014`（年代画风）。
 
-## 编辑、重绘与参考图
+权重：`{tag}` ×1.05、`[tag]` ÷1.05、`1.3::tag::` 数值权重。**负权重**适合精准去除或反转某个概念：`-1::hat::`（不够时用 `-3::hat::`）、`-1::monochrome::`、`-2.5::flat color::`、`-1::simple background::`。完整语法见 [references/prompt-syntax.md](references/prompt-syntax.md)。
 
-常用扩散参数位于 `parameters`（如 `width`、`height`、`scale`、`sampler`、`seed`、`n_samples`、`strength`、`noise`、`cfg_rescale`、`straight_alpha`、`upscale`）。
+## 多角色
 
-- **图生图与 Enhance**：传入 `image_path`，未指定宽高时自动对齐源图比例与 64 倍数（支持自动识别 EXIF 旋转）。`img2img` 默认 `strength: 0.7, noise: 0.2`；`enhance` 默认 `strength: 0.2, noise: 0`。
-- **局部重绘（`infill`）**：传入 `image_path` 与 `mask_path`（白色 `#FFFFFF` 重绘、黑色 `#000000` 保留，透明背景按黑色保留处理）。插件默认开启 `add_original_image: true` 保护未遮罩区域原貌，`strength` 默认 `1`。若用户只指定了要修改的部位而未提供现成蒙版文件，先按源图尺寸生成黑白 PNG 蒙版再调用 `infill`；扩图同理先拼接扩展画布与对应白色扩展区蒙版。
-- **Vibe Transfer**：在 `vibes` 中提供 `image_path` 或已缓存的 `encoding_path`，可调 `strength`（默认 0.6）与 `information_extracted`（默认 1）。
-- **Precise Reference**：仅 V4.5 支持，在 `references` 中提供 `image_path`、`type`（`character` / `style` / `character&style`）、`fidelity` 与 `strength`；插件自动缩放并黑边填充到官方参考画布。
+- 人数标签写在基础 `prompt`（如 `2girls`）；每个角色写入 `characters`，以 `girl` / `boy` / `other` 开头，不写数量词。
+- 不传坐标时，模型通常按角色顺序摆放（上→下、左→右）。传 `positions` 时，坐标应与角色顺序一致，并在基础提示词里用自然语言强化站位（如 `the black-haired girl on the left`）。
+- 互动标签：`source#hug`（发起方）、`target#hug`（承受方）、`mutual#holding hands`（双方），不保证每次生效。
+- 一个角色的特征串到另一个角色身上时，在后者的角色 `negative_prompt` 中排除该特征。
 
-各工具的完整参数调用示例见 [references/tools.md](references/tools.md)。
+## 画面文字与台词
 
-## 图片交付与视觉复核
+- 加上 `text` 和语言标签（`chinese text` / `english text` / `japanese text`），对白场景加 `speech bubble`；用自然语言说明谁在说、文字的位置和颜色。
+- **中文台词**：直接在描述中写 `saying “早上好！”`，插件会自动转为 `Text:`。
+- **英文、日文或需要精确控制时**：在基础 `prompt` 最末尾手写 `Text: 内容`，多段之间空一行。`Text:` 之后的任何内容都会被画成文字。
+- 在自然语言里重复一遍文字内容，可以提高渲染可靠性。长度上限：V5 Full 750 字符，V5 Curated 374 字符，V4/V4.5 118 字符。
+- 不要承诺长句拼写一次完全正确。
 
-工具成功后读取返回的 `images[].markdown`、`images[].path`、`images[].seed` 与 `metadata_path`。将 `markdown` 原样嵌入回复正文的合适段落（可按语境调整方括号内的图片说明文字）。路径对应本机真实落盘文件，严禁编造外部链接或把 Base64 贴入正文。
+## 透明背景
 
-用户仅索要提示词时直接交付提示词，不调用付费生成。已提交的付费请求失败或超时时如实说明错误，不盲目循环重试以免重复扣费。
+V5 设置 `transparent_background: true` 即可（插件会追加官方标签与提示）。需要半透明效果（魔法、火焰、雨伞等）时，在提示词中加入 `alpha transparency` 或 `has alpha`；背景去不干净时可加强为 `2.1::transparent background::`。
 
-在正文嵌入 Markdown 图片并不等于聊天模型自己已经“看见”画面。需要对成图做构图、手部、文字或重绘效果自检时，若当前环境提供 `read_image` 且当前聊天模型支持视觉输入，先调用 `read_image` 查看落盘文件再给出视觉判断；未读图时不要声称已目视核对画面细节。迭代微调时保留 `seed`、提示词与实际模型（均记录在同目录 `generation.json` 中）。
+## 角色一致性（RP / 连续剧情）
+
+1. 首次出场时，按「外貌 + 逐部位服装」写出该角色的完整标签块，之后每次原样复用，只改表情、动作、场景和取景。
+2. 角色更换服装时，同样一次写全新服装块，再固定复用。
+3. 构图满意后保留 `seed`，用同一 seed 微调提示词。
+4. 立绘表情差分：先用 `novelai_augment` 的 `emotion` 把立绘转成 neutral 表情，再以它为底生成其他表情（需要用户同意使用 Director Tools）。
+
+## RP 每轮生图流程
+
+1. 从本轮叙事中提取：在场角色（复用各自的标签块）、动作与表情、镜头与取景、地点、时间与光线、关键道具。
+2. 单人立绘用 `832×1216` 加 `visual novel sprite` 或 `cowboy shot`；多人互动或事件场景用 `1216×832` 加 `visual novel cg`。
+3. 有对白时把中文台词写在引号里，并加上 `speech bubble, text, chinese text`。
+4. 生成后把图片嵌入叙事中合适的位置。
+
+## 编辑与精修
+
+- **img2img**（默认 `strength 0.7, noise 0.2`）：传 `image_path`，画布自动适配到免费范围。
+- **Enhance**（默认 `strength 0.2, noise 0`）：官方建议先选定满意的构图，再用 Enhance 精修；可以在提示词里重复画面中被忽略的部分。
+- **infill**：传 `image_path` 与 `mask_path`（白色重绘、黑色保留）；用户只说明要改的部位时，先按源图尺寸生成黑白蒙版。每次只修一处；蒙版外的内容渗入时扩大蒙版；`strength` 调低可以保留原有大致形状。
+- **Vibe / Precise Reference**：仅限 V4.5（会消耗 Anlas）。Character Reference 最好使用干净背景、中性站姿的全身图，并在角落加一张脸部特写；多张角色参考会被融合成一个角色，不会被当作多个角色。
+
+各工具的调用示例见 [references/tools.md](references/tools.md)。
+
+## 交付与复核
+
+把工具返回的 `images[].markdown` 原样嵌入回复正文（可以修改方括号内的说明文字）。路径都是本机真实文件，严禁编造链接或粘贴 Base64。用户只要提示词时直接给提示词，不调用生成工具。已提交的请求失败或超时时，如实说明错误，不要盲目重试。
+
+嵌入图片不等于你已经看过画面。需要检查构图、手部或文字时，若环境提供 `read_image` 且当前模型支持视觉输入，先读取图片再下判断；没有读图就不要声称已核对细节。迭代时保留 `seed`、提示词和实际模型（都记录在同目录的 `generation.json` 中）。

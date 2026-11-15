@@ -4,10 +4,17 @@
 
 ## 安装
 
+使用 Desktop `0.2.1-rc.5` 或官方发布 tag `dsh-v0.2.2-rc.3` 时，请在对应 profile 的 `cordis.patch.yml` 给 `connection` 行补充以下依赖，已有配置保留在同一行。
+
+```yaml
+- id: connection
+  inject: [webStartup, webServer]
+```
+
 需要 Node.js `>=24.5.0`、DSH `>=0.2.0-rc.2 <0.2.3-0`。
 
 ```sh
-dsh plugin --profile web add github:yexi-by/dsh-novelai#v0.2.0
+dsh plugin --profile web add github:yexi-by/dsh-novelai#v0.2.1
 ```
 
 桌面端使用客户端内置 CLI，将 `--profile web` 改为 `--profile desktop`；本地目录安装可将包地址换为 `file:D:/work/dsh/plugin/novelai`。安装后重启 DSH，在「设置 → 插件 → NovelAI 生图」中保存 NovelAI Persistent API Token（或设置环境变量 `NOVELAI_API_TOKEN`）。

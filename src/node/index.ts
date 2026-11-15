@@ -60,7 +60,7 @@ export function apply(ctx: Context, config: Volatile<Settings>): void {
   })
   registerSkill(ctx)
 
-  ctx.inject(['connection'], child => {
+  ctx.inject(['connection', 'webServer'], child => {
     const dispose = child.connection.rpc.handle(RPC_CHANNEL, async (endpoint, _payload, signal) => {
       try {
         if (endpoint === 'get') {

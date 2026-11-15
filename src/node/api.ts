@@ -27,7 +27,7 @@ export class NovelAIClient {
         Authorization: `Bearer ${token}`,
         ...(payload === undefined ? {} : { 'Content-Type': 'application/json' }),
         Accept: accept,
-        'User-Agent': 'dsh-novelai/0.2.0',
+        'User-Agent': 'dsh-novelai/0.2.1',
       },
       ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
       signal: AbortSignal.any([signal, AbortSignal.timeout(this.timeoutSeconds() * 1000)]),
